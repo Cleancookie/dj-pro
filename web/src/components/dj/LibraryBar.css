@@ -268,3 +268,119 @@
   color: var(--live);
   border-color: var(--live);
 }
+
+/* ---- bulk add: per-link progress, so a failure never loses the rest ---- */
+.lib-bulk {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+}
+.lib-bulk-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lib-bulk-title {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+}
+.lib-bulk-prog {
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.lib-bulk-ok {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--live);
+}
+.lib-bulk-bad {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--hot);
+}
+.lib-bulk-head .lib-clear-all {
+  margin-left: auto;
+}
+.lib-bulk-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0 4px 0 0;
+  list-style: none;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 2px 12px;
+  align-content: start;
+}
+.lib-bulk-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.lib-bulk-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
+.lib-bulk-row.is-busy .lib-bulk-dot {
+  background: var(--warn);
+  animation: lib-pulse 700ms ease-in-out infinite;
+}
+.lib-bulk-row.is-ok .lib-bulk-dot {
+  background: var(--live);
+  box-shadow: 0 0 6px var(--live);
+}
+.lib-bulk-row.is-fail .lib-bulk-dot {
+  background: var(--hot);
+  box-shadow: 0 0 6px var(--hot);
+}
+@keyframes lib-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.lib-bulk-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lib-bulk-row.is-ok .lib-bulk-name {
+  color: var(--ink);
+}
+.lib-bulk-row.is-fail .lib-bulk-name {
+  color: var(--ink-4);
+  text-decoration: line-through;
+}
+.lib-bulk-err {
+  flex: 0 0 auto;
+  font-size: 9px;
+  color: var(--hot);
+}
+.lib-go.is-bulk {
+  color: var(--cue);
+  border-color: var(--cue);
+  box-shadow: var(--bevel), 0 0 14px -5px var(--cue);
+}
+.lib-count.is-bulk {
+  color: var(--cue);
+  padding: 0 6px;
+  letter-spacing: 0.04em;
+}

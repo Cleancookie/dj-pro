@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Band, DeckId, TransitionKind } from '../../lib/protocol';
-import { cmd, useDeck, useMixer, useMonitor } from '../../lib/store';
+import type { Band, DeckId, Mixer, Plan, TransitionKind } from '../../lib/protocol';
+import { cmd, useDeck, useMixer, useMonitor, useRoom } from '../../lib/store';
 import { deckPosition, mainGain, resolveCrossfade } from '../../lib/deckmath';
 import { clock } from '../../lib/clock';
 import { Fader } from './Fader';
@@ -9,6 +9,35 @@ import './MixerColumn.css';
 
 const pctFmt = (v: number) => `${Math.round(v * 100)}`;
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/**
+ * Short names for the four transition kinds, shared with the queue planner.
+ */
+export const KIND_LABEL: Record<TransitionKind, string> = {
+  cut: 'CUT',
+  crossfade: 'FADE',
+  fadeThrough: 'THRU',
+  bassSwap: 'BASS',
+};
+
+export const DEFAULT_KIND: TransitionKind = 'crossfade';
+export const DEFAULT_MS = 4000;
+
+/** A plan's zero values mean "inherit the mixer default" — resolve them here. */
+export function effectiveKind(plan: Plan | undefined, m: Mixer | null): TransitionKind {
+  if (plan && plan.kind) return plan.kind;
+  return m?.transitionKind ?? DEFAULT_KIND;
+}
+
+export function effectiveMs(plan: Plan | undefined, m: Mixer | null): number {
+  if (plan && plan.durationMs > 0) return plan.durationMs;
+  return m?.transitionMs ?? DEFAULT_MS;
+}
+
+/** `8.0s`, or nothing at all for a cut where duration is meaningless. */
+export function fmtDur(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
 
 const KILL_APPROX =
   'Approximated. YouTube exposes no audio graph, so an EQ kill is applied as level attenuation — there is no real filtering.';
@@ -278,6 +307,7 @@ const KINDS: { kind: TransitionKind; label: string; title: string }[] = [
 
 function TransitionBlock() {
   const mixer = useMixer();
+  const autoDj = useRoom()?.autoDj.enabled ?? false;
   const kind = mixer?.transitionKind ?? 'crossfade';
   const secs = Math.min(30, Math.max(0.5, (mixer?.transitionMs ?? 4000) / 1000));
   const auto = mixer?.auto;
@@ -314,7 +344,16 @@ function TransitionBlock() {
 
   return (
     <div className="mx-sec mx-trans">
-      <Head label="Transition" />
+      <Head
+        label="Transition"
+        chip="DEFAULT"
+        chipTitle="Queue items without a plan of their own inherit this kind and duration."
+      />
+      {autoDj && (
+        <p className="mx-autohint" title="Auto-advance is enabled — the server fires these transitions for you. Firing manually still works and takes effect immediately.">
+          Auto-advance is driving
+        </p>
+      )}
       <div className="mx-kinds" role="group" aria-label="Transition type">
         {KINDS.map((k) => (
           <button

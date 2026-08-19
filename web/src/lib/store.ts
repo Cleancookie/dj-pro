@@ -235,7 +235,15 @@ const eqVideo = (a: Video | null, b: Video | null): boolean =>
     a.author === b.author &&
     a.thumb === b.thumb &&
     a.durationSec === b.durationSec &&
-    a.addedBy === b.addedBy);
+    a.addedBy === b.addedBy &&
+    // The mix plan is part of a queue item's identity for UI purposes: editing how a track will be
+    // brought in must re-render the row, even though nothing else about the track changed.
+    // Optional-chained on purpose: an equality helper runs during render, so a Video that somehow
+    // arrives without a plan must compare false rather than throw and blank the page.
+    a.plan?.kind === b.plan?.kind &&
+    a.plan?.durationMs === b.plan?.durationMs &&
+    a.plan?.cueIn === b.plan?.cueIn &&
+    a.plan?.cueOut === b.plan?.cueOut);
 
 const eqDeck = (a: Deck | null, b: Deck | null): boolean =>
   a === b ||

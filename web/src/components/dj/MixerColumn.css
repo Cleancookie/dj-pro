@@ -314,3 +314,19 @@
 .mx-master .fader-value {
   color: var(--live);
 }
+
+/* ---- auto-advance notice inside the transition block ---- */
+.mx-autohint {
+  margin: 0;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--cue);
+  background: var(--sunk);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--cue);
+  text-align: center;
+  cursor: help;
+}

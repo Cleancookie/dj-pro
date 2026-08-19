@@ -96,23 +96,149 @@
 }
 
 /* ---- queue ---- */
+.sp-queue-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* set-wide readout: how much music is actually queued up */
+.sp-qstat {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.sp-qstat-n {
+  font-size: 13px;
+  color: var(--ink);
+}
+.sp-qstat-lbl {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-4);
+}
+.sp-qstat-time {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.sp-qstat-warn {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--warn);
+  cursor: help;
+}
+.sp-qstat-auto {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--bg);
+  background: var(--cue);
+  box-shadow: 0 0 10px -2px var(--cue);
+}
+
 .sp-queue {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
   margin: 0;
-  padding: 6px;
+  padding: 2px 6px 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
-.sp-row {
+
+/* ---- one item: its incoming transition, the row, and its plan editor ---- */
+.sp-item {
   position: relative;
-  display: grid;
-  grid-template-columns: 16px 46px 1fr auto;
+  list-style: none;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 62px;
+}
+.sp-item.is-dragging {
+  opacity: 0.4;
+}
+.sp-item.is-before::before,
+.sp-item.is-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 2;
+  background: var(--a);
+  box-shadow: 0 0 8px var(--a);
+}
+.sp-item.is-before::before {
+  top: 6px;
+}
+.sp-item.is-after::after {
+  bottom: -1px;
+}
+
+/* the join — reading down the list, this is how the set flows */
+.sp-join {
+  display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  height: 15px;
+  cursor: help;
+}
+.sp-join-line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+.sp-join-tag {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-4);
+}
+.sp-join-kind {
+  font-weight: 700;
+  color: var(--ink-3);
+}
+.sp-join-dur {
+  color: var(--ink-3);
+}
+.sp-join-def {
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+.sp-join-src {
+  font-weight: 700;
+  color: var(--live);
+}
+.sp-join.is-explicit .sp-join-kind,
+.sp-join.is-explicit .sp-join-dur {
+  color: var(--cue);
+}
+.sp-join.is-explicit .sp-join-line {
+  background: linear-gradient(90deg, transparent, var(--cue), transparent);
+  opacity: 0.55;
+}
+
+/* ---- the row itself ---- */
+.sp-row {
+  display: grid;
+  grid-template-columns: 15px 44px 1fr auto;
+  align-items: center;
+  gap: 6px;
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -125,25 +251,15 @@
   border-color: var(--line-2);
   background: var(--panel-3);
 }
-.sp-row.is-dragging {
-  opacity: 0.4;
+.sp-item.is-dragging .sp-row {
   cursor: grabbing;
 }
-.sp-row.is-before::before,
-.sp-row.is-after::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--a);
-  box-shadow: 0 0 8px var(--a);
+.sp-item.is-planned .sp-row {
+  box-shadow: var(--sh-1), inset 2px 0 0 var(--cue);
 }
-.sp-row.is-before::before {
-  top: -3px;
-}
-.sp-row.is-after::after {
-  bottom: -3px;
+.sp-item.is-open .sp-row {
+  border-color: var(--cue);
+  background: var(--panel-3);
 }
 .sp-row-n {
   font-size: 10px;
@@ -151,7 +267,7 @@
   text-align: right;
 }
 .sp-thumb {
-  width: 46px;
+  width: 44px;
   aspect-ratio: 16 / 9;
   border-radius: var(--r-sm);
   background: var(--sunk);
@@ -169,9 +285,16 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 1px;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
 }
 .sp-row-title {
+  max-width: 100%;
   font-size: 11px;
   color: var(--ink);
   white-space: nowrap;
@@ -179,27 +302,68 @@
   text-overflow: ellipsis;
 }
 .sp-row-sub {
+  max-width: 100%;
   display: flex;
+  align-items: center;
   gap: 4px;
   font-size: 9px;
   color: var(--ink-3);
   white-space: nowrap;
+  overflow: hidden;
+}
+.sp-row-who {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sp-row-by {
   color: var(--ink-4);
 }
+.sp-row-flag {
+  flex: 0 0 auto;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0 3px;
+  line-height: 11px;
+  border-radius: 2px;
+  color: var(--bg);
+  background: var(--cue);
+}
+.sp-row-meta:focus-visible {
+  outline: 1px solid var(--cue);
+  outline-offset: 2px;
+}
+
 .sp-row-acts {
   display: flex;
   align-items: center;
   gap: 3px;
 }
+.sp-chev {
+  width: 18px;
+  height: 22px;
+  font-size: 9px;
+  color: var(--ink-4);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color var(--fast), transform var(--fast), border-color var(--fast);
+}
+.sp-chev:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.sp-chev.is-open {
+  color: var(--cue);
+  transform: rotate(180deg);
+}
 .sp-load {
   height: 22px;
-  min-width: 26px;
-  padding: 0 4px;
-  font-size: 9px;
+  min-width: 22px;
+  padding: 0 5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--deck);
@@ -215,7 +379,7 @@
   box-shadow: var(--bevel), 0 0 10px -3px var(--deck);
 }
 .sp-x {
-  width: 22px;
+  width: 20px;
   height: 22px;
   font-size: 10px;
   color: var(--ink-4);
@@ -230,18 +394,238 @@
   border-color: var(--hot);
 }
 .sp-load:focus-visible,
-.sp-x:focus-visible {
-  outline: 1px solid var(--deck, var(--a));
+.sp-x:focus-visible,
+.sp-chev:focus-visible {
+  outline: 1px solid var(--deck, var(--cue));
   outline-offset: 1px;
 }
+
+/* ---- per-item plan editor ---- */
+.sp-plan {
+  margin: 4px 0 2px;
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: var(--sunk);
+  border: 1px solid var(--cue);
+  border-radius: var(--r);
+  box-shadow: var(--sh-in);
+}
+.sp-plan-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-plan-lbl {
+  flex: 0 0 40px;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-4);
+}
+.sp-plan-kinds {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+}
+.sp-pk {
+  height: 21px;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel);
+  cursor: pointer;
+  transition: color var(--fast), background var(--fast), border-color var(--fast);
+}
+.sp-pk:hover {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+/* an explicit choice is cue-purple; inheriting is neutral */
+.sp-pk.is-on {
+  color: var(--bg);
+  background: var(--cue);
+  border-color: var(--cue);
+  box-shadow: 0 0 10px -2px var(--cue);
+}
+.sp-pk.is-def.is-on {
+  color: var(--bg);
+  background: var(--ink-3);
+  border-color: var(--ink-2);
+  box-shadow: none;
+}
+
+.sp-plan-fader {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sp-plan-fader .fader-head {
+  height: 12px;
+}
+.sp-plan-fader .fader-label {
+  font-size: 8px;
+}
+.sp-plan-fader .fader-value {
+  font-size: 9px;
+}
+.sp-plan-fader .fader-track {
+  height: 20px;
+}
+.sp-plan-fader .fader-cap {
+  height: 20px;
+  margin-top: -10px;
+}
+.sp-plan-dur.is-inherited .fader-label {
+  font-style: italic;
+}
+.sp-def {
+  flex: 0 0 auto;
+  height: 21px;
+  padding: 0 6px;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color var(--fast), background var(--fast), border-color var(--fast);
+}
+.sp-def:hover {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+.sp-def.is-on {
+  color: var(--bg);
+  background: var(--ink-3);
+  border-color: var(--ink-2);
+}
+
+.sp-plan-cues {
+  gap: 5px;
+  align-items: flex-end;
+}
+.sp-time {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sp-time-lbl {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-4);
+}
+.sp-time-in {
+  width: 100%;
+  height: 22px;
+  padding: 0 5px;
+  font-size: 10px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: border-color var(--fast), color var(--fast);
+}
+.sp-time-in::placeholder {
+  color: var(--ink-4);
+}
+.sp-time-in:focus {
+  border-color: var(--cue);
+}
+.sp-time.is-set .sp-time-in {
+  color: var(--cue);
+  border-color: var(--cue);
+}
+.sp-time.is-bad .sp-time-in {
+  color: var(--hot);
+  border-color: var(--hot);
+}
+
+.sp-plan-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sp-plan-note {
+  margin: 0;
+  font-size: 8px;
+  line-height: 1.45;
+  color: var(--ink-4);
+}
+.sp-plan-clear {
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 7px;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.sp-plan-clear:hover {
+  color: var(--hot);
+  border-color: var(--hot);
+}
+
+/* ---- drop target past the last row, and the paging footer ---- */
 .sp-drop-end {
   list-style: none;
-  height: 14px;
+  height: 16px;
   border-radius: var(--r-sm);
   transition: background var(--fast);
 }
 .sp-drop-end.is-over {
   background: linear-gradient(to bottom, var(--a-glow), transparent);
+}
+.sp-more {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px 0 2px;
+}
+.sp-more button {
+  height: 26px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-2);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel);
+  cursor: pointer;
+}
+.sp-more button:hover {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+.sp-more-hint {
+  font-size: 8px;
+  line-height: 1.4;
+  color: var(--ink-4);
+  text-align: center;
 }
 
 /* ---- chat ---- */

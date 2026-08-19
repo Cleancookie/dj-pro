@@ -2,7 +2,7 @@
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 12px;
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
   border-bottom: 1px solid var(--line);
@@ -128,7 +128,7 @@
 .tb-meter {
   flex: 0 0 auto;
   position: relative;
-  width: 110px;
+  width: 92px;
   height: 8px;
   border-radius: 99px;
   background: var(--sunk);
@@ -143,7 +143,7 @@
   width: 0;
   border-radius: 99px;
   background: linear-gradient(to right, var(--live) 0%, var(--live) 62%, var(--warn) 84%, var(--hot) 100%);
-  background-size: 110px 100%;
+  background-size: 92px 100%;
 }
 
 /* ---- audience link ---- */
@@ -162,7 +162,7 @@
   font-size: 11px;
   color: var(--ink-2);
   text-decoration: none;
-  max-width: 190px;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -217,4 +217,146 @@
 .tb-link-a:focus-visible {
   outline: 1px solid var(--a);
   outline-offset: 1px;
+}
+
+/* ---- auto-advance: the switch that decides who is driving the set ---- */
+.tb-auto {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 9px 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 99px;
+  background: var(--sunk);
+  box-shadow: var(--sh-in);
+  transition: border-color var(--med), box-shadow var(--med), background var(--med);
+}
+.tb-auto.is-on {
+  border-color: var(--cue);
+  background: var(--panel-3);
+  box-shadow: var(--sh-in), 0 0 18px -4px var(--cue);
+}
+
+.tb-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.tb-switch-track {
+  position: relative;
+  width: 32px;
+  height: 17px;
+  border-radius: 99px;
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--sh-in);
+  transition: background var(--med), border-color var(--med);
+}
+.tb-switch-knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  box-shadow: var(--bevel);
+  transition: transform var(--med), background var(--med), box-shadow var(--med);
+}
+.tb-auto.is-on .tb-switch-track {
+  background: var(--cue);
+  border-color: var(--cue);
+}
+.tb-auto.is-on .tb-switch-knob {
+  transform: translateX(15px);
+  background: var(--bg);
+  box-shadow: 0 0 8px var(--cue);
+}
+.tb-switch-word {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--ink-3);
+  transition: color var(--med);
+}
+.tb-auto.is-on .tb-switch-word {
+  color: var(--cue);
+  text-shadow: 0 0 10px var(--cue);
+}
+.tb-switch:focus-visible {
+  outline: 1px solid var(--cue);
+  outline-offset: 3px;
+  border-radius: 99px;
+}
+
+/* the "what happens next" readout */
+.tb-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding-left: 8px;
+  border-left: 1px solid var(--line-2);
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tb-next-off,
+.tb-next-warn {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tb-next-warn {
+  color: var(--warn);
+}
+.tb-next-warn b {
+  color: var(--ink-2);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.tb-next-label {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ink-4);
+}
+.tb-next-deck {
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--deck);
+  box-shadow: 0 0 10px -2px var(--deck);
+}
+.tb-next-kind {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+}
+.tb-next-dur {
+  font-size: 9px;
+  color: var(--ink-3);
+}
+.tb-next-count {
+  font-size: 11px;
+  color: var(--cue);
+  min-width: 44px;
 }
