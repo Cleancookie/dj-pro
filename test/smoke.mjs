@@ -67,6 +67,25 @@ const derive = (d, now) => (d.playing ? d.anchorPos + ((now - d.anchorAt) / 1000
   ok('auth promotes the socket to DJ', dj.role === 'dj', 'role=' + dj.role);
 
   dj.send({ t: 'identity', name: 'TestDJ' });
+
+  // Start from a known room. Without this the suite is not idempotent: the auto-advance checks
+  // below leave cue points and a rotated queue behind, and on a second run against the same server
+  // an inherited out point correctly clamps playback - which looks like a sync failure but is the
+  // app behaving properly.
+  dj.cmd({ action: 'autodj.set', enabled: false });
+  for (const item of dj.state.queue) dj.cmd({ action: 'queue.remove', id: item.id });
+  for (const deck of ['a', 'b']) {
+    dj.cmd({ action: 'deck.eject', deck });
+    dj.cmd({ action: 'deck.loop', deck, on: false });
+    dj.cmd({ action: 'deck.cueOut', deck, sec: 0 });
+    dj.cmd({ action: 'deck.cueIn', deck, sec: 0 });
+    dj.cmd({ action: 'deck.rate', deck, rate: 1 });
+    dj.cmd({ action: 'deck.gain', deck, gain: 1 });
+  }
+  dj.cmd({ action: 'mixer.crossfade', value: -1 });
+  dj.cmd({ action: 'mixer.transition', kind: 'crossfade', durationMs: 8000 });
+  await dj.waitFor((s) => s.queue.length === 0 && !s.decks[0].video && !s.decks[1].video);
+  ok('the room resets to a known state', dj.state.decks[0].cueOut === 0 && dj.state.mixer.crossfade === -1);
   dj.cmd({ action: 'deck.load', deck: 'a', video: { ...vid, id: '' } });
   await dj.waitFor((s) => s.decks[0].video?.videoId === VID);
   ok('deck.load lands on deck A', dj.state.decks[0].video.videoId === VID);
