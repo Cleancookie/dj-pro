@@ -29,7 +29,9 @@ every play / pause / seek / rate change. `serverNow = Date.now() + clockOffsetMs
 | `error` | `{ message }` |
 | `denied` | `{ message }` — auth failure |
 
-`config`: `{ searchEnabled: bool, deckRates: number[] }`
+`config`: `{ searchEnabled: bool, mediaEnabled: bool, deckRates: number[] }`
+
+`deckRates` is YouTube's fixed rate list. It applies to YouTube decks only — see **Track sources**.
 
 ## Client -> Server
 
@@ -93,6 +95,21 @@ requests  Video[]   what the room has asked for, kept apart from the crate on pu
                     any plan or client-chosen id. Never persisted.
 ```
 
+### Track sources
+A `Video` carries a `source`, and it decides which player every client builds for it:
+```
+source "youtube"  videoId is the 11-char id. The iframe API only honours the rates in
+                  `deckRates`, so the server snaps deck.rate and reports rateReq and rateActual
+                  separately - the difference IS the beatmatching error.
+source "file"     url is a path under /media/, served by this server from MEDIA_DIR. Played
+                  through a media element, so rateActual == rateReq exactly, at any float, with
+                  the pitch moving with the rate. This is the only source that can beatmatch.
+```
+A file track has no `videoId` and no thumbnail; its `url` is validated hard server-side (a
+`/media/` path, nothing absolute, no traversal, no query string) because unlike an 11-character id
+it decides what every listener's browser will fetch. `deck.rate` and `deck.sync` re-derive
+`rateActual` from whatever the deck currently holds, so swapping a file for a video re-snaps it.
+
 ## HTTP
 ```
 GET  /api/health            -> {ok:true}
@@ -101,6 +118,9 @@ POST /api/admin/logout
 GET  /api/me                -> {role:"dj"|"audience"}
 GET  /api/resolve?url=...   -> Video   (YouTube oEmbed, no API key needed)
 GET  /api/search?q=...      -> Video[] (only if YOUTUBE_API_KEY set; else 501)
+GET  /api/media             -> {items:[{url,title,sizeBytes,durationSec}], truncated} (DJ only;
+                               501 without MEDIA_DIR). The DJ's own files, max 2000 listed.
+GET  /media/*               -> the files themselves (only if MEDIA_DIR is set)
 GET  /ws                    -> websocket
 GET  /*                     -> embedded SPA
 ```

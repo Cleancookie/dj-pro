@@ -169,6 +169,42 @@ const derive = (d, now) => (d.playing ? d.anchorPos + ((now - d.anchorAt) / 1000
   dj.cmd({ action: 'crate.remove', id: qid });
   await dj.waitFor((s) => s.crate.length === 0);
 
+  // --- file-backed decks: the pitch fader stops lying -----------------------------------------
+  dj.cmd({ action: 'crate.add', video: { id: '', source: 'file', url: '/media/Test%20Tone.wav' } });
+  await dj.waitFor((s) => s.crate.length === 1);
+  const fileItem = dj.state.crate[0];
+  ok('a file track is accepted with no video id', fileItem.source === 'file' && fileItem.videoId === '',
+    JSON.stringify({ source: fileItem.source, videoId: fileItem.videoId }));
+  ok('a file track titles itself from its file name', fileItem.title === 'Test Tone', fileItem.title);
+
+  dj.cmd({ action: 'crate.add', video: { id: '', source: 'file', url: 'https://evil.example/x.mp3' } });
+  await sleep(200);
+  ok('an off-server file URL is refused', dj.state.crate.length === 1, 'crate=' + dj.state.crate.length);
+
+  dj.cmd({ action: 'crate.load', id: fileItem.id, deck: 'a' });
+  await dj.waitFor((s) => s.decks[0].video?.id === fileItem.id);
+  dj.cmd({ action: 'deck.rate', deck: 'a', rate: 1.03 });
+  await dj.waitFor((s) => s.decks[0].rateReq === 1.03);
+  ok('a file deck honours the exact rate', dj.state.decks[0].rateActual === 1.03,
+    'actual=' + dj.state.decks[0].rateActual);
+
+  dj.cmd({ action: 'deck.load', deck: 'a', video: { ...vid, id: '' } });
+  await dj.waitFor((s) => s.decks[0].video?.videoId === VID);
+  ok('reloading a YouTube track re-snaps the rate the file deck was holding',
+    dj.state.decks[0].rateActual === 1 && dj.state.decks[0].rateReq === 1.03,
+    JSON.stringify({ req: dj.state.decks[0].rateReq, actual: dj.state.decks[0].rateActual }));
+  dj.cmd({ action: 'deck.rate', deck: 'a', rate: 1 });
+  dj.cmd({ action: 'deck.eject', deck: 'a' });
+  dj.cmd({ action: 'crate.remove', id: fileItem.id });
+  await dj.waitFor((s) => s.crate.length === 0);
+
+  if (crowd.config?.mediaEnabled) {
+    const anon = await fetch(BASE + '/api/media');
+    ok('GET /api/media is DJ only', anon.status === 403, 'status=' + anon.status);
+  } else {
+    console.log('SKIP  /api/media (server has no MEDIA_DIR)');
+  }
+
   // --- the crowd's request list ------------------------------------------------------------
   crowd.send({ t: 'request', video: { videoId: VID, title: 'Please play this' } });
   await dj.waitFor((s) => s.requests.length === 1, 2000);

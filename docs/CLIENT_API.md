@@ -76,8 +76,9 @@ export class TapTempo { tap(): number | null; reset(): void; get count(): number
 ```
 
 ## `lib/engine.ts`
-Owns the two YouTube iframes, the DJ's third (preview) iframe, the drift-correction loop and all
-volume routing.
+Owns both deck players, the DJ's third (preview) player, the drift-correction loop and all volume
+routing. A deck's player is a YouTube iframe or a media element depending on `video.source`; both
+sit behind one internal `DeckPlayer` adapter, so the ticks never branch on the kind.
 ```ts
 export function useEngine(): void;                       // call ONCE in the page root
 export function useDeckMount(id: DeckId): (el: HTMLDivElement | null) => void;
@@ -92,6 +93,9 @@ export function previewToggle(): void;
 export function previewStop(): void;
 export function usePreview(): { videoId: string | null; title: string; playing: boolean };
 export function usePreviewMount(): (el: HTMLDivElement | null) => void;  // mount it exactly once
+
+export function trackRef(v: Video | null): TrackRef | null;   // {source, videoId, url}
+export function trackKey(r: TrackRef | null): string | null;  // load identity: 'yt:ID' | 'file:/media/...'
 ```
 The preview player's gain is `cueVol * cueMix` — the cue bus and nothing else — so it is silent
 with CUE MIX hard over on MASTER, exactly like a monitored deck.

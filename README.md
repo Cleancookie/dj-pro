@@ -46,6 +46,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 | `SESSION_SECRET` | random at boot | HMAC key for the DJ session cookie |
 | `YOUTUBE_API_KEY` | – | optional; enables in-app search. Pasting links always works without it |
 | `DATA_DIR` | `./data` | where the crate/room snapshot is written |
+| `MEDIA_DIR` | – | optional; a folder of your own audio/video. Served at `/media/`, and the only source you can truly beatmatch |
 
 ## The set
 
@@ -86,6 +87,25 @@ local to the DJ's browser — the audience is never affected.
 track in the crate, the request list or the library without touching a deck: hit `♪` on a row and it
 appears in the preview strip under the side panel. Its gain is the cue bus and nothing else, so with
 CUE MIX hard over on MASTER you will not hear it. That is the point, and the strip says so.
+
+## Two kinds of track
+
+A crate item is either a **YouTube** track or a **file** from `MEDIA_DIR`, and the difference is the
+pitch fader. YouTube's iframe API only honours a fixed list of playback rates — `0.25, 0.5, 0.75, 1,
+1.25, 1.5, 1.75, 2` — and it preserves pitch while it does so. There is no way round this from
+outside the iframe, so the booth is honest about it instead: the fader stays continuous, the server
+snaps the request, and the readout shows you both numbers so you can see the beatmatching error.
+
+Point `MEDIA_DIR` at a folder of your own tracks and the booth grows a **Files** button in the
+library bar. Those play through a plain media element, which means:
+
+- **any rate at all**, so ±8% beatmatching works the way it does on real gear;
+- **pitch moves with the rate** (`preservesPitch = false`), so it sounds like a turntable rather
+  than a tape machine with a pitch corrector;
+- no third-party player, so nothing about the deck depends on YouTube being reachable.
+
+The two mix together freely — one deck can be a file while the other is a video, and every sync,
+plan, transition and auto-advance rule is identical for both.
 
 ## How the sync works
 

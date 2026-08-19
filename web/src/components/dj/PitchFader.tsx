@@ -51,18 +51,21 @@ export function PitchFader({ id }: { id: DeckId }) {
 
   const rateReq = deck?.rateReq ?? 1;
   const rateActual = deck?.rateActual ?? 1;
-  const snapped = Math.abs(rateReq - rateActual) > 0.0015;
+  /* A file deck honours any rate, so it has no snap error and no fixed rates to mark. */
+  const continuous = deck?.video?.source === 'file';
+  const snapped = !continuous && Math.abs(rateReq - rateActual) > 0.0015;
 
   const frac = clamp((rateReq - MIN) / (MAX - MIN), 0, 1);
   const capY = (1 - frac) * TRAVEL;
 
   // reachable rates, so the limitation reads as a feature rather than a bug
   const ticks = useMemo(() => {
+    if (continuous) return [];
     const rates = config?.deckRates?.length ? config.deckRates : [];
     return rates
       .filter((r) => r >= MIN && r <= MAX)
       .map((r) => ({ r, y: (1 - (r - MIN) / (MAX - MIN)) * TRAVEL }));
-  }, [config]);
+  }, [config, continuous]);
 
   const rateFromClientY = (clientY: number) => {
     const el = trackRef.current;
@@ -168,7 +171,14 @@ export function PitchFader({ id }: { id: DeckId }) {
             ⇢ {rateActual.toFixed(3)}× {pctText(rateActual)}%
           </div>
         ) : (
-          <div className="pf-snap is-ok num" title="The requested rate is one YouTube can play exactly">
+          <div
+            className="pf-snap is-ok num"
+            title={
+              continuous
+                ? 'A local file plays at any rate, with the pitch moving with it — beatmatch freely'
+                : 'The requested rate is one YouTube can play exactly'
+            }
+          >
             {rateActual.toFixed(3)}×
           </div>
         )}

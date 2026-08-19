@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -420,8 +422,7 @@ func (h *Hub) deckCmd(c *Client, d *Deck, f *cmdFrame, now int64) {
 
 	case "deck.rate":
 		d.reanchor(now) // the old rate applied up to this instant
-		d.RateReq = clamp(f.Rate, minDJRate, maxDJRate)
-		d.RateActual = SnapRate(d.RateReq)
+		d.applyRate(clamp(f.Rate, minDJRate, maxDJRate))
 		h.touch()
 
 	case "deck.gain":
@@ -476,8 +477,7 @@ func (h *Hub) deckCmd(c *Client, d *Deck, f *cmdFrame, now int64) {
 		}
 		want := (other.BPM * other.RateActual) / d.BPM
 		d.reanchor(now)
-		d.RateReq = clamp(want, minDJRate, maxDJRate)
-		d.RateActual = SnapRate(d.RateReq)
+		d.applyRate(clamp(want, minDJRate, maxDJRate))
 		h.touch()
 
 	case "deck.monitor":
@@ -514,6 +514,9 @@ func (h *Hub) loadDeck(d *Deck, v *Video, cueInOverride *float64, now int64) {
 	d.Video = v
 	d.Playing = false
 	d.Loop = false
+	// The new track may not be able to honour the rate the old one did: a YouTube deck snaps,
+	// a file deck does not. Re-derive rather than carry a stale RateActual.
+	d.applyRate(d.RateReq)
 
 	cueIn := v.Plan.CueIn
 	if cueInOverride != nil {
@@ -816,6 +819,70 @@ func (h *Hub) planCrateItem(c *Client, id string, patch *planPatch) {
 	h.touchPersist()
 }
 
+// mediaPathRe is what a file track's URL is allowed to look like: a path this server itself
+// serves, and nothing else. No absolute URLs (a deck must not be a way to make every listener's
+// browser fetch an arbitrary host), no traversal, no query string.
+// The charset is exactly what url.PathEscape leaves alone, plus the % it introduces: anything a
+// listing produces must pass this, and a space or a ? must not.
+var mediaSeg = `[A-Za-z0-9._~!$&'()*+,;=:@%\[\]-]+`
+var mediaPathRe = regexp.MustCompile(`^/media/` + mediaSeg + `(?:/` + mediaSeg + `)*$`)
+
+func validMediaPath(p string) bool {
+	return len(p) <= 300 && mediaPathRe.MatchString(p) && !strings.Contains(p, "..")
+}
+
+// sanitizeFileVideo is the file-source half of sanitizeVideo. A file track has no YouTube id at
+// all, so the URL carries its identity and has to be checked far more carefully than an 11-char id.
+func sanitizeFileVideo(v *Video, addedBy string) *Video {
+	u := strings.TrimSpace(v.URL)
+	if !validMediaPath(u) {
+		return nil
+	}
+	out := &Video{
+		ID:          sanitizeText(v.ID, 64),
+		Source:      SourceFile,
+		URL:         u,
+		Title:       sanitizeText(v.Title, 200),
+		Author:      sanitizeText(v.Author, 100),
+		DurationSec: clamp(v.DurationSec, 0, maxTrackSec),
+		AddedBy:     sanitizeText(v.AddedBy, maxNameLen),
+		PlayedAt:    v.PlayedAt,
+		Plan:        sanitizePlan(v.Plan),
+	}
+	// A local file has no thumbnail to speak of; an http one is still allowed if a client found
+	// artwork somewhere, but nothing is invented.
+	t := strings.TrimSpace(v.Thumb)
+	if strings.HasPrefix(t, "https://") || strings.HasPrefix(t, "http://") {
+		out.Thumb = sanitizeText(t, 300)
+	}
+	if out.ID == "" {
+		out.ID = newID()
+	}
+	if out.Title == "" {
+		out.Title = fileTitle(u)
+	}
+	if out.AddedBy == "" {
+		out.AddedBy = sanitizeText(addedBy, maxNameLen)
+	}
+	return out
+}
+
+// fileTitle is the last-resort display name: the file's own name, undecorated.
+func fileTitle(p string) string {
+	name := p[strings.LastIndex(p, "/")+1:]
+	if i := strings.LastIndex(name, "."); i > 0 {
+		name = name[:i]
+	}
+	if unescaped, err := url.PathUnescape(name); err == nil {
+		name = unescaped
+	}
+	name = sanitizeText(name, 200)
+	if name == "" {
+		return "Unknown track"
+	}
+	return name
+}
+
 // --- crate helpers ---------------------------------------------------------
 
 func (h *Hub) crateItem(id string) *Video {
@@ -1034,6 +1101,9 @@ func sanitizeVideo(v *Video, addedBy string) *Video {
 	if v == nil {
 		return nil
 	}
+	if v.Source == SourceFile {
+		return sanitizeFileVideo(v, addedBy)
+	}
 	id := strings.TrimSpace(v.VideoID)
 	if !validVideoID(id) {
 		// Tolerate a full URL landing in videoId.
@@ -1046,11 +1116,13 @@ func sanitizeVideo(v *Video, addedBy string) *Video {
 	out := &Video{
 		ID:          sanitizeText(v.ID, 64),
 		VideoID:     id,
+		Source:      SourceYouTube,
 		Title:       sanitizeText(v.Title, 200),
 		Author:      sanitizeText(v.Author, 100),
 		Thumb:       safeThumb(v.Thumb, id),
 		DurationSec: clamp(v.DurationSec, 0, maxTrackSec),
 		AddedBy:     sanitizeText(v.AddedBy, maxNameLen),
+		PlayedAt:    v.PlayedAt,
 		Plan:        sanitizePlan(v.Plan),
 	}
 	if out.ID == "" {

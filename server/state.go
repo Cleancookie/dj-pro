@@ -13,8 +13,14 @@ type Video struct {
 	Thumb       string  `json:"thumb"`
 	DurationSec float64 `json:"durationSec"` // 0 until a client reports it
 	AddedBy     string  `json:"addedBy"`
-	PlayedAt    int64   `json:"playedAt"` // server epoch ms it was last loaded to a deck; 0 = never
-	Plan        Plan    `json:"plan"`     // how this track should come IN
+	// Source decides which player the clients build for this track, and with it what the pitch
+	// fader can do. "youtube" is an iframe whose rate snaps to YouTube's fixed list; "file" is a
+	// plain media element served from MEDIA_DIR, whose rate is continuous - the only way to
+	// actually beatmatch.
+	Source   string `json:"source"`   // "youtube" | "file"
+	URL      string `json:"url"`      // file sources only: a path under /media/
+	PlayedAt int64  `json:"playedAt"` // server epoch ms it was last loaded to a deck; 0 = never
+	Plan     Plan   `json:"plan"`     // how this track should come IN
 
 	// byClient is the request author's client id. Unexported: it is nobody's business but the
 	// server's, and it exists only to enforce the per-listener request cap.
@@ -41,7 +47,7 @@ type Deck struct {
 	AnchorPos  float64 `json:"anchorPos"`  // seconds into the video
 	AnchorAt   int64   `json:"anchorAt"`   // server epoch ms when AnchorPos was true
 	RateReq    float64 `json:"rateReq"`    // requested rate (continuous, for the pitch fader UI)
-	RateActual float64 `json:"rateActual"` // rate actually applied (snapped to YT's allowed list)
+	RateActual float64 `json:"rateActual"` // rate actually applied (snapped for YT decks, exact for file decks)
 	Gain       float64 `json:"gain"`       // 0..1 channel fader
 	Trim       float64 `json:"trim"`       // 0..2
 	CueIn      float64 `json:"cueIn"`
@@ -114,9 +120,18 @@ type RoomState struct {
 	mu sync.Mutex `json:"-"`
 }
 
+const (
+	SourceYouTube = "youtube"
+	SourceFile    = "file"
+)
+
+// IsFile reports whether this track plays through a media element rather than a YouTube iframe.
+func (v *Video) IsFile() bool { return v != nil && v.Source == SourceFile }
+
 // AllowedRates mirrors YouTube's getAvailablePlaybackRates(). The DJ's pitch fader is
-// continuous; the server snaps the request to the nearest value the player can actually honour
-// and reports both so the UI can show the beatmatching error.
+// continuous; for a YouTube deck the server snaps the request to the nearest value the player can
+// actually honour and reports both so the UI can show the beatmatching error. A file deck honours
+// the request exactly, so RateActual == RateReq and there is no error to show.
 var AllowedRates = []float64{0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2}
 
 func SnapRate(r float64) float64 {
@@ -131,6 +146,16 @@ func SnapRate(r float64) float64 {
 		}
 	}
 	return best
+}
+
+// applyRate honours a requested rate as closely as the loaded track's player allows.
+func (d *Deck) applyRate(req float64) {
+	d.RateReq = req
+	if d.Video.IsFile() {
+		d.RateActual = req // media elements take any float
+		return
+	}
+	d.RateActual = SnapRate(req)
 }
 
 func NewRoomState() *RoomState {

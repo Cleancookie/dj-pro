@@ -38,10 +38,17 @@ type Config struct {
 	SessionSecret []byte
 	YouTubeAPIKey string
 	DataDir       string
+	// MediaDir holds the DJ's own audio/video files. They are served at /media/ and played through
+	// a media element rather than a YouTube iframe, which is what makes continuous pitch - and so
+	// real beatmatching - possible. Empty (the default) leaves the whole feature off.
+	MediaDir string
 }
 
 // SearchEnabled reports whether /api/search can do any work.
 func (c *Config) SearchEnabled() bool { return c.YouTubeAPIKey != "" }
+
+// MediaEnabled reports whether file-backed decks are available at all.
+func (c *Config) MediaEnabled() bool { return c.MediaDir != "" }
 
 const defaultPassword = "letmein"
 
@@ -51,6 +58,7 @@ func loadConfig() *Config {
 		DJPassword:    os.Getenv("DJ_PASSWORD"),
 		YouTubeAPIKey: strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")),
 		DataDir:       env("DATA_DIR", "./data"),
+		MediaDir:      strings.TrimSpace(os.Getenv("MEDIA_DIR")),
 	}
 	if c.DJPassword == "" {
 		log.Printf("!!! ================================================================")
@@ -143,6 +151,12 @@ func routes(cfg *Config, hub *Hub) http.Handler {
 	mux.HandleFunc("GET /api/me", handleMe(cfg))
 	mux.HandleFunc("GET /api/resolve", yt.handleResolve)
 	mux.HandleFunc("GET /api/search", yt.handleSearch)
+	mux.HandleFunc("GET /api/media", handleMediaList(cfg))
+	if cfg.MediaEnabled() {
+		// The DJ's own files. Read-only, and only what is under MEDIA_DIR: http.Dir already
+		// refuses traversal, and the crate accepts nothing but a /media/ path (see validMediaPath).
+		mux.Handle("GET /media/", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaDir))))
+	}
 	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWS(cfg, hub, w, r)
 	})

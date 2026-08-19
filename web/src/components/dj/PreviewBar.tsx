@@ -16,15 +16,16 @@ export function PreviewBar() {
   const [mon] = useMonitor();
   const silent = mon.cueMix <= 0.001 || mon.cueVol <= 0.001;
 
-  if (!p.videoId) return null;
+  if (!p.ref) return null;
+  const what = p.title || (p.ref.source === 'file' ? p.ref.url : p.ref.videoId);
 
   return (
     <div className={`pv${silent ? ' is-silent' : ''}`}>
       <div className="pv-screen" ref={mount} />
       <div className="pv-meta">
         <span className="pv-lbl">Preview</span>
-        <span className="pv-title" title={p.title || p.videoId}>
-          {p.title || p.videoId}
+        <span className="pv-title" title={what}>
+          {what}
         </span>
         {silent && (
           <span className="pv-warn" title="The preview only feeds the cue bus — turn CUE MIX towards CUE to hear it">

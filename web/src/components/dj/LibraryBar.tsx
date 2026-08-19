@@ -29,6 +29,26 @@ function splitTokens(raw: string): string[] {
     .filter(Boolean);
 }
 
+/** A crate-shaped Video for a local file. The server re-derives everything; this is for display. */
+function fileVideo(item: { url: string; title: string }): Video {
+  return {
+    id: '',
+    videoId: '',
+    source: 'file',
+    url: item.url,
+    title: item.title,
+    author: 'local file',
+    thumb: '',
+    durationSec: 0,
+    addedBy: '',
+    playedAt: 0,
+    plan: { kind: '', durationMs: 0, cueIn: 0, cueOut: 0 },
+  };
+}
+
+/** Identity for the "already added" ticks: a file has no video id to be identified by. */
+const cardKey = (v: Video) => (v.source === 'file' ? v.url : v.videoId);
+
 interface BulkRow {
   token: string;
   state: 'pending' | 'busy' | 'ok' | 'fail';
@@ -91,7 +111,9 @@ export function LibraryBar() {
   const config = useConfig();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Video[]>([]);
-  const [mode, setMode] = useState<'resolve' | 'search' | null>(null);
+  const [mode, setMode] = useState<'resolve' | 'search' | 'files' | null>(null);
+  const [files, setFiles] = useState<Video[] | null>(null);
+  const [filesTruncated, setFilesTruncated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
@@ -191,8 +213,45 @@ export function LibraryBar() {
   const load = (video: Video, deck: DeckId) => cmd({ action: 'deck.load', deck, video });
   const enqueue = (video: Video) => {
     cmd({ action: 'crate.add', video });
-    setQueued((prev) => (prev.includes(video.videoId) ? prev : [...prev, video.videoId]));
+    const k = cardKey(video);
+    setQueued((prev) => (prev.includes(k) ? prev : [...prev, k]));
   };
+
+  /**
+   * The DJ's own files. Fetched once and filtered in the browser: the list is bounded server-side,
+   * and a local filter is instant where a round trip per keystroke is not.
+   */
+  const showFiles = async () => {
+    setError(null);
+    setHint(false);
+    setBulk(null);
+    setBulkDone(null);
+    setResults([]);
+    setMode('files');
+    if (files) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/media', { credentials: 'include' });
+      const body: unknown = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = body && typeof body === 'object' && 'error' in body ? String(body.error) : `Request failed (${res.status}).`;
+        setError(msg);
+        setMode(null);
+        return;
+      }
+      const raw = (body as { items?: { url: string; title: string }[]; truncated?: boolean }) ?? {};
+      setFiles((raw.items ?? []).map(fileVideo));
+      setFilesTruncated(!!raw.truncated);
+    } catch {
+      setError('Could not reach the server.');
+      setMode(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const filter = q.trim().toLowerCase();
+  const shownFiles = !files ? [] : filter ? files.filter((v) => v.title.toLowerCase().includes(filter)) : files;
 
   const clear = () => {
     abort.current?.abort();
@@ -203,6 +262,55 @@ export function LibraryBar() {
     setBusy(false);
     setBulk(null);
     setBulkDone(null);
+  };
+
+  /* One card renderer, so a local file and a YouTube result cannot drift apart. */
+  const card = (v: Video) => {
+    const k = cardKey(v);
+    return (
+      <article className="lib-card" key={`${v.source}-${k}-${v.id}`}>
+        <span className="lib-thumb">
+          {v.thumb ? <img src={v.thumb} alt="" loading="lazy" /> : v.source === 'file' ? <span className="lib-file-glyph">♫</span> : null}
+        </span>
+        <div className="lib-meta">
+          <span className="lib-title" title={v.title}>
+            {v.title || k}
+          </span>
+          <span className="lib-author" title={v.source === 'file' ? v.url : v.author}>
+            {v.source === 'file' ? 'local file · any pitch' : v.author || 'unknown'}
+          </span>
+        </div>
+        <div className="lib-acts">
+          <button
+            type="button"
+            className="lib-act is-cue"
+            title={`Preview "${v.title}" in your headphones`}
+            onClick={() => previewPlay(v)}
+          >
+            ♪ Cue
+          </button>
+          {(['a', 'b'] as DeckId[]).map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={`lib-act deck-${d}`}
+              title={`Load "${v.title}" onto deck ${d.toUpperCase()} now`}
+              onClick={() => load(v, d)}
+            >
+              Load {d.toUpperCase()}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`lib-act is-queue${queued.includes(k) ? ' is-done' : ''}`}
+            title="Add to the end of the crate"
+            onClick={() => enqueue(v)}
+          >
+            {queued.includes(k) ? '✓ In crate' : '+ Crate'}
+          </button>
+        </div>
+      </article>
+    );
   };
 
   return (
@@ -287,7 +395,23 @@ export function LibraryBar() {
             {results.length}
           </span>
         )}
-        {results.length > 0 && (
+        {config.mediaEnabled && (
+          <button
+            type="button"
+            className={`lib-files${mode === 'files' ? ' is-on' : ''}`}
+            title="Your own files from MEDIA_DIR — these play at any pitch, so they are the ones you can truly beatmatch"
+            onClick={() => void showFiles()}
+          >
+            Files
+            {mode === 'files' && files && (
+              <span className="lib-count num">
+                {shownFiles.length}
+                {filesTruncated ? '+' : ''}
+              </span>
+            )}
+          </button>
+        )}
+        {(results.length > 0 || mode === 'files') && (
           <button type="button" className="lib-clear-all" onClick={clear} title="Dismiss results">
             Clear
           </button>
@@ -341,56 +465,26 @@ export function LibraryBar() {
             ))}
           </div>
         )}
-        {!bulk && !busy && !hint && !error && results.length === 0 && (
+        {!bulk && !busy && !hint && !error && mode !== 'files' && results.length === 0 && (
           <p className="lib-note">
             Drop a link in here to resolve it, then send it to a deck or the crate. Paste a whole list — one per line
             or comma separated — to build a set in one go. Nothing loads onto a deck until you say so.
           </p>
         )}
         {!bulk && !busy && results.length > 0 && (
+          <div className="lib-strip">{results.map(card)}</div>
+        )}
+        {!bulk && !busy && mode === 'files' && files && (
           <div className="lib-strip">
-            {results.map((v) => (
-              <article className="lib-card" key={`${v.videoId}-${v.id}`}>
-                <span className="lib-thumb">{v.thumb ? <img src={v.thumb} alt="" loading="lazy" /> : null}</span>
-                <div className="lib-meta">
-                  <span className="lib-title" title={v.title}>
-                    {v.title || v.videoId}
-                  </span>
-                  <span className="lib-author" title={v.author}>
-                    {v.author || 'unknown'}
-                  </span>
-                </div>
-                <div className="lib-acts">
-                  <button
-                    type="button"
-                    className="lib-act is-cue"
-                    title={`Preview "${v.title}" in your headphones`}
-                    onClick={() => previewPlay(v)}
-                  >
-                    ♪ Cue
-                  </button>
-                  {(['a', 'b'] as DeckId[]).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={`lib-act deck-${d}`}
-                      title={`Load "${v.title}" onto deck ${d.toUpperCase()} now`}
-                      onClick={() => load(v, d)}
-                    >
-                      Load {d.toUpperCase()}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className={`lib-act is-queue${queued.includes(v.videoId) ? ' is-done' : ''}`}
-                    title="Add to the end of the crate"
-                    onClick={() => enqueue(v)}
-                  >
-                    {queued.includes(v.videoId) ? '✓ In crate' : '+ Crate'}
-                  </button>
-                </div>
-              </article>
-            ))}
+            {shownFiles.length === 0 ? (
+              <p className="lib-note">
+                {files.length === 0
+                  ? 'No playable files in MEDIA_DIR yet. Drop some in and hit Files again.'
+                  : `Nothing in your files matches "${q.trim()}".`}
+              </p>
+            ) : (
+              shownFiles.map(card)
+            )}
           </div>
         )}
       </div>

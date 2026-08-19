@@ -15,6 +15,13 @@ export interface Video {
   durationSec: number; // 0 until reported by a player
   addedBy: string;
   playedAt: number;    // server ms it was last loaded to a deck; 0 = never played
+  /**
+   * Which player this track needs. 'youtube' is an iframe whose rate snaps to a fixed list;
+   * 'file' is a media element served from MEDIA_DIR, whose rate is continuous — the only source
+   * on which the pitch fader can actually beatmatch.
+   */
+  source: 'youtube' | 'file';
+  url: string;         // file sources only: a path under /media/
   plan: Plan;          // how this track should come IN
 }
 
@@ -89,7 +96,13 @@ export interface RoomState {
   serverNow: number;
 }
 
-export interface ServerConfig { searchEnabled: boolean; deckRates: number[] }
+export interface ServerConfig {
+  searchEnabled: boolean;
+  /** Whether the server has a MEDIA_DIR, i.e. whether file-backed decks exist at all. */
+  mediaEnabled: boolean;
+  /** YouTube's fixed rate list. File decks ignore it — they take any float. */
+  deckRates: number[];
+}
 
 export type ServerMsg =
   | { t: 'hello'; role: Role; clientId: string; serverTime: number; state: RoomState; config: ServerConfig }

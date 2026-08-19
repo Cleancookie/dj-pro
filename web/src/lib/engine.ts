@@ -1,5 +1,11 @@
-// The playback engine: one YouTube iframe per deck (plus the DJ's preview player), drift
-// correction, volume routing.
+// The playback engine: one player per deck (plus the DJ's preview player), drift correction,
+// volume routing.
+//
+// A deck's player is either a YouTube iframe or a plain media element pointed at a file this
+// server serves. Both are driven through the same small DeckPlayer adapter, because the two ticks
+// below should not care which one they are talking to - and because the difference that matters is
+// not in the control flow but in the pitch fader: YouTube snaps the rate to a fixed list, a media
+// element takes any float and, with preservesPitch off, actually behaves like a turntable.
 //
 // Everything here is a module-level singleton driven by two timers:
 //   * a 250ms CONTROL tick   — load/cue, play/pause, rate, drift correction, metadata
@@ -11,7 +17,7 @@
 // must still complete when nobody is looking at the tab.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { DeckId } from './protocol';
+import type { DeckId, Video } from './protocol';
 import { DECK_IDS, deckIndex } from './protocol';
 import { clock } from './clock';
 import { deckPosition, mainGain } from './deckmath';
@@ -36,6 +42,164 @@ const ST_ENDED = 0;
 const ST_PLAYING = 1;
 const ST_PAUSED = 2;
 const ST_BUFFERING = 3;
+
+// --- player adapter -------------------------------------------------------
+
+/** What a deck plays. `url` is meaningful only for file sources, `videoId` only for YouTube. */
+export interface TrackRef {
+  source: 'youtube' | 'file';
+  videoId: string;
+  url: string;
+}
+
+export function trackRef(v: Video | null): TrackRef | null {
+  if (!v) return null;
+  return { source: v.source === 'file' ? 'file' : 'youtube', videoId: v.videoId, url: v.url };
+}
+
+/** Identity of what is loaded. Two file tracks differ by URL; two YouTube tracks by video id. */
+export function trackKey(r: TrackRef | null): string | null {
+  if (!r) return null;
+  if (r.source === 'file') return r.url ? 'file:' + r.url : null;
+  return r.videoId ? 'yt:' + r.videoId : null;
+}
+
+/**
+ * The surface both player kinds present. Deliberately narrower than YT.Player: every method here
+ * is one the ticks actually call, which is what keeps the media-element implementation honest.
+ */
+interface DeckPlayer {
+  load(ref: TrackRef, startSeconds: number, autoplay: boolean): void;
+  /** One of the ST_* constants, whichever player is underneath. */
+  getState(): number;
+  setRate(rate: number): void;
+  play(): void;
+  pause(): void;
+  seek(sec: number): void;
+  currentTime(): number;
+  duration(): number;
+  setVolume(pct: number): void;
+  mute(): void;
+  unmute(): void;
+  destroy(): void;
+}
+
+function ytAdapter(p: YT.Player): DeckPlayer {
+  return {
+    load(ref, startSeconds, autoplay) {
+      if (autoplay) p.loadVideoById({ videoId: ref.videoId, startSeconds });
+      else p.cueVideoById({ videoId: ref.videoId, startSeconds });
+    },
+    getState: () => p.getPlayerState(),
+    setRate: (r) => p.setPlaybackRate(r),
+    play: () => p.playVideo(),
+    pause: () => p.pauseVideo(),
+    seek: (sec) => p.seekTo(sec, true),
+    currentTime: () => p.getCurrentTime(),
+    duration: () => p.getDuration(),
+    setVolume: (pct) => p.setVolume(pct),
+    mute: () => p.mute(),
+    unmute: () => p.unMute(),
+    destroy: () => p.destroy(),
+  };
+}
+
+/**
+ * A file deck. `<video>` rather than `<audio>` so an mp4 shows its picture, and
+ * `preservesPitch = false` because a DJ pitching a record expects the pitch to move with it —
+ * YouTube's rate control does the opposite, which is half of why it is useless for beatmatching.
+ */
+function mediaAdapter(el: HTMLVideoElement): DeckPlayer {
+  return {
+    load(ref, startSeconds, autoplay) {
+      el.src = ref.url;
+      el.load();
+      const seek = () => {
+        try {
+          el.currentTime = Math.max(0, startSeconds);
+        } catch {
+          /* not seekable yet; the drift loop will place it */
+        }
+        if (autoplay) void el.play().catch(() => {});
+      };
+      if (el.readyState >= 1) seek();
+      else el.addEventListener('loadedmetadata', seek, { once: true });
+    },
+    getState() {
+      if (el.error) return ST_UNSTARTED;
+      if (el.ended) return ST_ENDED;
+      if (el.paused) return el.currentTime > 0 || el.readyState > 0 ? ST_PAUSED : ST_UNSTARTED;
+      // HAVE_FUTURE_DATA is the point at which playback can actually continue; below it the
+      // element is stalling, which is exactly what YouTube calls BUFFERING.
+      return el.readyState >= 3 ? ST_PLAYING : ST_BUFFERING;
+    },
+    setRate(r) {
+      el.playbackRate = r;
+    },
+    play: () => void el.play().catch(() => {}),
+    pause: () => el.pause(),
+    seek(sec) {
+      try {
+        el.currentTime = Math.max(0, sec);
+      } catch {
+        /* ignore */
+      }
+    },
+    currentTime: () => el.currentTime,
+    duration: () => (Number.isFinite(el.duration) ? el.duration : 0),
+    setVolume: (pct) => {
+      el.volume = clamp01(pct / 100);
+    },
+    mute: () => {
+      el.muted = true;
+    },
+    unmute: () => {
+      el.muted = false;
+    },
+    destroy() {
+      try {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+      } catch {
+        /* ignore */
+      }
+      el.remove();
+    },
+  };
+}
+
+/** Build the media element itself. Kept apart from the adapter so the DOM work is in one place. */
+function createMediaElement(mount: HTMLDivElement, onReady: () => void, label: string): HTMLVideoElement {
+  const el = document.createElement('video');
+  el.playsInline = true;
+  el.preload = 'auto';
+  el.controls = false;
+  el.style.width = '100%';
+  el.style.height = '100%';
+  el.style.objectFit = 'contain';
+  el.style.background = '#000';
+  // Same-origin today, but declaring it keeps the element eligible for a Web Audio graph later.
+  el.crossOrigin = 'anonymous';
+  el.muted = true; // the gate unmutes; never open with a blast of audio
+  setPreservesPitch(el, false);
+  el.addEventListener('error', () => console.warn(`[engine] ${label} media error`, el.error?.message));
+  el.addEventListener('loadedmetadata', onReady, { once: true });
+  mount.appendChild(el);
+  return el;
+}
+
+/** The property is still prefixed in some engines, and typed on none of them. */
+function setPreservesPitch(el: HTMLVideoElement, on: boolean): void {
+  const any = el as HTMLVideoElement & {
+    preservesPitch?: boolean;
+    mozPreservesPitch?: boolean;
+    webkitPreservesPitch?: boolean;
+  };
+  any.preservesPitch = on;
+  any.mozPreservesPitch = on;
+  any.webkitPreservesPitch = on;
+}
 
 // --- iframe API loader ----------------------------------------------------
 
@@ -71,13 +235,16 @@ function loadApi(): Promise<void> {
 interface DeckRuntime {
   /** The container handed to us by React. */
   mount: HTMLDivElement | null;
-  /** The div we create inside it; YT replaces this node with its iframe. */
-  host: HTMLDivElement | null;
-  player: YT.Player | null;
+  /** The node we create inside it: a div YT replaces with its iframe, or the media element. */
+  host: HTMLElement | null;
+  player: DeckPlayer | null;
   ready: boolean;
   creating: boolean;
   ytState: number;
-  loadedVideoId: string | null;
+  /** trackKey() of what the player holds, so a file and a video are never confused. */
+  loadedKey: string | null;
+  /** Which KIND of player was built. A track that changes kind needs a new one, not a load. */
+  source: 'youtube' | 'file' | null;
   lastRate: number;
   lastVolume: number;
   muted: boolean;
@@ -97,7 +264,8 @@ function blankRuntime(): DeckRuntime {
     ready: false,
     creating: false,
     ytState: ST_UNSTARTED,
-    loadedVideoId: null,
+    loadedKey: null,
+    source: null,
     lastRate: -1,
     lastVolume: -1,
     muted: true,
@@ -129,14 +297,16 @@ export function setScrub(id: DeckId, active: boolean): void {
 
 interface PreviewRuntime {
   mount: HTMLDivElement | null;
-  host: HTMLDivElement | null;
-  player: YT.Player | null;
+  host: HTMLElement | null;
+  player: DeckPlayer | null;
   ready: boolean;
   creating: boolean;
   lastVolume: number;
   muted: boolean;
-  /** What the player currently holds, so a re-preview of the same track resumes. */
-  loadedVideoId: string | null;
+  /** trackKey() of what the player holds, so a re-preview of the same track resumes. */
+  loadedKey: string | null;
+  /** Which KIND of player was built. Auditioning the other kind needs a new one. */
+  source: 'youtube' | 'file' | null;
 }
 
 const preview: PreviewRuntime = {
@@ -147,23 +317,24 @@ const preview: PreviewRuntime = {
   creating: false,
   lastVolume: -1,
   muted: true,
-  loadedVideoId: null,
+  loadedKey: null,
+  source: null,
 };
 
 /** What the UI needs to render. Kept separate from the runtime so React never reads a live iframe. */
 export interface PreviewState {
-  videoId: string | null;
+  ref: TrackRef | null;
   title: string;
   playing: boolean;
 }
 
-let previewState: PreviewState = { videoId: null, title: '', playing: false };
+let previewState: PreviewState = { ref: null, title: '', playing: false };
 const previewSubs = new Set<() => void>();
 
 function setPreviewState(next: Partial<PreviewState>): void {
   const merged = { ...previewState, ...next };
   if (
-    merged.videoId === previewState.videoId &&
+    trackKey(merged.ref) === trackKey(previewState.ref) &&
     merged.title === previewState.title &&
     merged.playing === previewState.playing
   ) {
@@ -173,8 +344,36 @@ function setPreviewState(next: Partial<PreviewState>): void {
   for (const fn of previewSubs) fn();
 }
 
-function createPreviewPlayer(mount: HTMLDivElement, videoId: string): void {
+function createPreviewPlayer(mount: HTMLDivElement, ref: TrackRef): void {
   if (preview.player || preview.mount !== mount) return;
+
+  if (ref.source === 'file') {
+    const el = createMediaElement(
+      mount,
+      () => {
+        preview.ready = true;
+        preview.lastVolume = -1;
+        volumeTick();
+      },
+      'preview',
+    );
+    el.addEventListener('play', () => setPreviewState({ playing: true }));
+    el.addEventListener('pause', () => setPreviewState({ playing: false }));
+    el.addEventListener('ended', () => setPreviewState({ playing: false }));
+    preview.host = el;
+    preview.player = mediaAdapter(el);
+    preview.source = 'file';
+    preview.ready = true;
+    if (gateUnlocked) {
+      el.muted = false;
+      preview.muted = false;
+    }
+    preview.player.load(ref, 0, true);
+    preview.loadedKey = trackKey(ref);
+    volumeTick();
+    return;
+  }
+
   const host = document.createElement('div');
   host.style.width = '100%';
   host.style.height = '100%';
@@ -182,10 +381,10 @@ function createPreviewPlayer(mount: HTMLDivElement, videoId: string): void {
   preview.host = host;
 
   try {
-    preview.player = new window.YT!.Player(host, {
+    const yt = new window.YT!.Player(host, {
       width: '100%',
       height: '100%',
-      videoId,
+      videoId: ref.videoId,
       playerVars: {
         controls: 0,
         disablekb: 1,
@@ -199,14 +398,14 @@ function createPreviewPlayer(mount: HTMLDivElement, videoId: string): void {
       events: {
         onReady: () => {
           preview.ready = true;
-          preview.loadedVideoId = videoId;
+          preview.loadedKey = trackKey(ref);
           preview.lastVolume = -1;
           try {
             if (gateUnlocked) {
-              preview.player?.unMute();
+              preview.player?.unmute();
               preview.muted = false;
             }
-            preview.player?.playVideo();
+            preview.player?.play();
           } catch {
             /* ignore */
           }
@@ -224,37 +423,85 @@ function createPreviewPlayer(mount: HTMLDivElement, videoId: string): void {
         },
       },
     });
+    preview.player = ytAdapter(yt);
+    preview.source = 'youtube';
   } catch (err) {
     console.error('[engine] could not create the preview player', err);
     preview.player = null;
   }
 }
 
-function ensurePreviewPlayer(videoId: string): void {
+function ensurePreviewPlayer(ref: TrackRef): void {
   const mount = preview.mount;
   if (!mount || preview.player || preview.creating) return;
+  if (ref.source === 'file') {
+    createPreviewPlayer(mount, ref);
+    return;
+  }
   preview.creating = true;
   void loadApi().then(() => {
     preview.creating = false;
     if (preview.mount !== mount || preview.player) return;
-    createPreviewPlayer(mount, videoId);
+    createPreviewPlayer(mount, ref);
   });
 }
 
+/** Throw away the preview player itself, for when the NEXT audition needs a different kind. */
+function destroyPreviewPlayer(): void {
+  try {
+    preview.player?.destroy();
+  } catch {
+    /* already gone */
+  }
+  if (preview.host && preview.host.parentNode) {
+    try {
+      preview.host.parentNode.removeChild(preview.host);
+    } catch {
+      /* already gone */
+    }
+  }
+  preview.player = null;
+  preview.host = null;
+  preview.ready = false;
+  preview.creating = false;
+  preview.source = null;
+  preview.loadedKey = null;
+  preview.lastVolume = -1;
+  preview.muted = true;
+}
+
+/** Anything with enough of a Video on it to play: a crate item, a request, a library result. */
+export interface PreviewTarget {
+  source?: string;
+  videoId?: string;
+  url?: string;
+  title?: string;
+}
+
 /** Audition a track in the headphones. Re-previewing what is already loaded just resumes it. */
-export function previewPlay(video: { videoId: string; title?: string }, startSec = 0): void {
-  if (!video?.videoId) return;
-  setPreviewState({ videoId: video.videoId, title: video.title ?? '', playing: true });
+export function previewPlay(video: PreviewTarget, startSec = 0): void {
+  const ref: TrackRef = {
+    source: video.source === 'file' ? 'file' : 'youtube',
+    videoId: video.videoId ?? '',
+    url: video.url ?? '',
+  };
+  const key = trackKey(ref);
+  if (!key) return;
+  setPreviewState({ ref, title: video.title ?? '', playing: true });
+
+  // Auditioning a file after a video (or the other way round) needs the other kind of player.
+  if (preview.player && preview.source !== ref.source) destroyPreviewPlayer();
+
   if (!preview.player || !preview.ready) {
-    ensurePreviewPlayer(video.videoId);
+    ensurePreviewPlayer(ref);
     return;
   }
   try {
-    if (preview.loadedVideoId === video.videoId && startSec <= 0) {
-      preview.player.playVideo();
+    if (preview.loadedKey === key && startSec <= 0) {
+      preview.player.play();
     } else {
-      preview.player.loadVideoById({ videoId: video.videoId, startSeconds: Math.max(0, startSec) });
-      preview.loadedVideoId = video.videoId;
+      preview.player.load(ref, Math.max(0, startSec), true);
+      preview.loadedKey = key;
     }
   } catch {
     /* the player will catch up on its next ready */
@@ -265,8 +512,8 @@ export function previewToggle(): void {
   const p = preview.player;
   if (!p || !preview.ready) return;
   try {
-    if (previewState.playing) p.pauseVideo();
-    else p.playVideo();
+    if (previewState.playing) p.pause();
+    else p.play();
   } catch {
     /* ignore */
   }
@@ -274,9 +521,9 @@ export function previewToggle(): void {
 
 /** Stop and forget. The iframe stays put — building it again costs a second of buffering. */
 export function previewStop(): void {
-  setPreviewState({ videoId: null, title: '', playing: false });
+  setPreviewState({ ref: null, title: '', playing: false });
   try {
-    preview.player?.pauseVideo();
+    preview.player?.pause();
   } catch {
     /* ignore */
   }
@@ -299,22 +546,13 @@ export function usePreviewMount(): (el: HTMLDivElement | null) => void {
     if (el) {
       if (preview.mount === el) return;
       preview.mount = el;
-      if (previewState.videoId) ensurePreviewPlayer(previewState.videoId);
+      if (previewState.ref) ensurePreviewPlayer(previewState.ref);
       return;
     }
-    // Unmounted (leaving the booth): tear the iframe down, it has no audience to serve.
-    try {
-      preview.player?.destroy();
-    } catch {
-      /* already gone */
-    }
+    // Unmounted (leaving the booth): tear the player down, it has no audience to serve.
+    destroyPreviewPlayer();
     preview.mount = null;
-    preview.host = null;
-    preview.player = null;
-    preview.ready = false;
-    preview.loadedVideoId = null;
-    preview.lastVolume = -1;
-    setPreviewState({ videoId: null, title: '', playing: false });
+    setPreviewState({ ref: null, title: '', playing: false });
   }, []);
 }
 
@@ -349,17 +587,17 @@ function unlockAudio(): void {
     const rt = decks[id];
     if (!rt.player || !rt.ready) continue;
     try {
-      rt.player.unMute();
+      rt.player.unmute();
       rt.muted = false;
       const deck = room?.decks[deckIndex(id)];
-      if (deck?.playing) rt.player.playVideo();
+      if (deck?.playing) rt.player.play();
     } catch {
       /* player not ready yet; the control tick will catch up */
     }
   }
   if (preview.player && preview.ready) {
     try {
-      preview.player.unMute();
+      preview.player.unmute();
       preview.muted = false;
     } catch {
       /* ignore */
@@ -390,13 +628,38 @@ export function useAudioGate(): { unlocked: boolean; unlock(): void } {
  * Instantiate the iframe for a deck that actually has a track.
  *
  * `initialVideoId` is passed to the constructor purely so the very first frame
- * shows the right poster instead of an empty player; `rt.loadedVideoId` stays
+ * shows the right poster instead of an empty player; `rt.loadedKey` stays
  * null, so the control tick still issues the authoritative load/cue with a
  * fractional `startSeconds` (see step 1 there).
  */
-function createPlayer(id: DeckId, mount: HTMLDivElement, initialVideoId: string): void {
+function createPlayer(id: DeckId, mount: HTMLDivElement, ref: TrackRef): void {
   const rt = decks[id];
   if (rt.player || rt.mount !== mount) return;
+
+  if (ref.source === 'file') {
+    const el = createMediaElement(
+      mount,
+      () => {
+        rt.ready = true;
+        rt.lastVolume = -1;
+        controlTick();
+        volumeTick();
+      },
+      `deck ${id}`,
+    );
+    rt.host = el;
+    rt.player = mediaAdapter(el);
+    rt.source = 'file';
+    // A media element is usable the moment it exists; readiness here only gates the first tick.
+    rt.ready = el.readyState >= 1;
+    if (!gateUnlocked) rt.muted = true;
+    else {
+      el.muted = false;
+      rt.muted = false;
+    }
+    controlTick();
+    return;
+  }
 
   const host = document.createElement('div');
   host.style.width = '100%';
@@ -405,10 +668,10 @@ function createPlayer(id: DeckId, mount: HTMLDivElement, initialVideoId: string)
   rt.host = host;
 
   try {
-    rt.player = new window.YT!.Player(host, {
+    const yt = new window.YT!.Player(host, {
       width: '100%',
       height: '100%',
-      videoId: initialVideoId,
+      videoId: ref.videoId,
       playerVars: {
         controls: 0,
         disablekb: 1,
@@ -427,7 +690,7 @@ function createPlayer(id: DeckId, mount: HTMLDivElement, initialVideoId: string)
             // Start silent: unmuting before the gate opens would be blocked
             // anyway, and a blast of audio is the worst first impression.
             if (gateUnlocked) {
-              rt.player?.unMute();
+              rt.player?.unmute();
               rt.muted = false;
             } else {
               rt.player?.mute();
@@ -447,6 +710,8 @@ function createPlayer(id: DeckId, mount: HTMLDivElement, initialVideoId: string)
         },
       },
     });
+    rt.player = ytAdapter(yt);
+    rt.source = 'youtube';
   } catch (err) {
     console.error('[engine] could not create player', err);
     rt.player = null;
@@ -464,10 +729,17 @@ function ensurePlayer(id: DeckId): void {
   const rt = decks[id];
   if (!rt.mount || rt.player || rt.creating) return;
   const deck = getState().room?.decks[deckIndex(id)];
-  const videoId = deck?.video ? deck.video.videoId : null;
-  if (!videoId) return;
+  const ref = trackRef(deck?.video ?? null);
+  if (!ref || !trackKey(ref)) return;
 
   const mount = rt.mount;
+  // A file deck needs no third-party API, so it is built immediately - one less reason for the
+  // booth to depend on YouTube being reachable at all.
+  if (ref.source === 'file') {
+    createPlayer(id, mount, ref);
+    return;
+  }
+
   rt.creating = true; // set before the await so the control tick cannot double-fire
   void loadApi().then(() => {
     // destroyPlayer swaps in a fresh runtime object, so an identity check tells
@@ -475,7 +747,7 @@ function ensurePlayer(id: DeckId): void {
     if (decks[id] !== rt) return;
     rt.creating = false;
     if (rt.mount !== mount || rt.player) return;
-    createPlayer(id, mount, videoId);
+    createPlayer(id, mount, ref);
   });
 }
 
@@ -494,7 +766,8 @@ function destroyPlayer(id: DeckId, keepMount = false): void {
   }
   // Remove only nodes we created. The mount div belongs to React (a UI author may
   // legitimately render overlays inside it), so never blanket-clear its children:
-  // YT swaps our host div for an iframe, so look for both.
+  // YT swaps our host div for an iframe, so look for both. A media element removes
+  // itself in its own destroy().
   try {
     if (rt.host && rt.host.parentNode) rt.host.parentNode.removeChild(rt.host);
     if (rt.mount) {
@@ -554,16 +827,17 @@ function controlTick(): void {
     const rt = decks[id];
     const deck = room.decks[deckIndex(id)];
     if (!deck) continue;
-    const videoId = deck.video ? deck.video.videoId : null;
+    const ref = trackRef(deck.video);
+    const key = trackKey(ref);
 
-    // 0. an empty deck owns no iframe. Ejecting destroys it again so the UI's
+    // 0. an empty deck owns no player. Ejecting destroys it again so the UI's
     //    empty state is not sitting under a stray YouTube play button.
-    if (!videoId) {
+    if (!key || !ref) {
       if (rt.player || rt.creating) destroyPlayer(id, true);
       continue;
     }
 
-    // The deck has a track: make sure an iframe exists (no-op if it already does,
+    // The deck has a track: make sure a player exists (no-op if it already does,
     // or if React has not handed us a mount element yet).
     const player = rt.player;
     if (!player || !rt.ready) {
@@ -576,28 +850,30 @@ function controlTick(): void {
     // 1. video changed (or is being loaded into a freshly created player). The
     //    constructor's videoId only fixed the poster; this is the load that puts
     //    the playhead at the right fractional second.
-    if (videoId !== rt.loadedVideoId) {
-      rt.loadedVideoId = videoId;
+    if (key !== rt.loadedKey) {
+      // A track can also change KIND - a file replacing a YouTube video on the same deck. The
+      // player itself is wrong then, not just its contents, so rebuild rather than load.
+      if (ref.source !== rt.source) {
+        destroyPlayer(id, true);
+        continue;
+      }
+      rt.loadedKey = key;
       rt.metaSent = false;
       rt.lastRate = -1;
       rt.driftMs = 0;
       rt.cooldownUntil = localNow + LOAD_COOLDOWN_MS;
       try {
-        if (deck.playing) {
-          player.loadVideoById({ videoId, startSeconds: target });
-        } else {
-          player.cueVideoById({ videoId, startSeconds: target });
-        }
+        player.load(ref, target, deck.playing);
       } catch (err) {
         console.warn('[engine] load failed', err);
-        rt.loadedVideoId = null; // retry next tick
+        rt.loadedKey = null; // retry next tick
       }
       continue; // let it settle before reconciling anything else
     }
 
     let ytState = rt.ytState;
     try {
-      ytState = player.getPlayerState();
+      ytState = player.getState();
       rt.ytState = ytState;
     } catch {
       continue; // iframe not talking yet
@@ -606,7 +882,7 @@ function controlTick(): void {
     // 2. playback rate
     if (Math.abs(rt.lastRate - deck.rateActual) > 0.001 && deck.rateActual > 0) {
       try {
-        player.setPlaybackRate(deck.rateActual);
+        player.setRate(deck.rateActual);
         rt.lastRate = deck.rateActual;
       } catch {
         /* ignore */
@@ -618,14 +894,14 @@ function controlTick(): void {
       if (deck.playing) {
         if (ytState === ST_ENDED) {
           // Looping or a re-cue: jump back and go again.
-          player.seekTo(target, true);
-          player.playVideo();
+          player.seek(target);
+          player.play();
           rt.cooldownUntil = localNow + SEEK_COOLDOWN_MS;
         } else if (ytState !== ST_PLAYING && ytState !== ST_BUFFERING) {
-          player.playVideo();
+          player.play();
         }
       } else if (ytState === ST_PLAYING || ytState === ST_BUFFERING) {
-        player.pauseVideo();
+        player.pause();
       }
     } catch {
       /* ignore */
@@ -639,7 +915,7 @@ function controlTick(): void {
     if (settled && !rt.scrubbing) {
       let actual = NaN;
       try {
-        actual = player.getCurrentTime();
+        actual = player.currentTime();
       } catch {
         actual = NaN;
       }
@@ -649,8 +925,8 @@ function controlTick(): void {
         const seekable = deck.playing || ytState === ST_PAUSED;
         if (seekable && Math.abs(drift) > DRIFT_LIMIT_S && localNow >= rt.cooldownUntil) {
           try {
-            player.seekTo(target, true);
-            if (deck.playing && ytState === ST_PAUSED) player.playVideo();
+            player.seek(target);
+            if (deck.playing && ytState === ST_PAUSED) player.play();
           } catch {
             /* ignore */
           }
@@ -663,7 +939,7 @@ function controlTick(): void {
     if (st.role === 'dj' && !rt.metaSent && deck.video && deck.video.durationSec <= 0) {
       let dur = 0;
       try {
-        dur = player.getDuration();
+        dur = player.duration();
       } catch {
         dur = 0;
       }
@@ -706,7 +982,7 @@ function volumeTick(): void {
     }
     if (rt.muted) {
       try {
-        player.unMute();
+        player.unmute();
       } catch {
         /* ignore */
       }
@@ -769,7 +1045,7 @@ function previewVolumeTick(): void {
   }
   if (preview.muted) {
     try {
-      player.unMute();
+      player.unmute();
     } catch {
       /* ignore */
     }

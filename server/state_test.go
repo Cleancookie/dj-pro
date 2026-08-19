@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSnapRateChoosesNearestAllowed(t *testing.T) {
 	cases := []struct{ in, want float64 }{
@@ -58,5 +61,64 @@ func TestNewRoomStateDefaults(t *testing.T) {
 	}
 	if s.Crate == nil || s.Requests == nil || s.Chat == nil {
 		t.Error("crate, requests and chat must be non-nil so they marshal as [] not null")
+	}
+}
+
+func TestValidMediaPath(t *testing.T) {
+	good := []string{
+		"/media/track.mp3",
+		"/media/crates/house/Some%20Track%20(Extended%20Mix).flac",
+		"/media/a_b-c.d~e!f$g&h'i(j)k*l+m,n;o=p@q.wav",
+	}
+	for _, p := range good {
+		if !validMediaPath(p) {
+			t.Errorf("expected %q to be a valid media path", p)
+		}
+	}
+	bad := []string{
+		"",
+		"/media/",
+		"track.mp3",                      // not under /media/
+		"/media/../../etc/passwd",        // traversal
+		"/media/a/../b.mp3",              // traversal mid-path
+		"/media/with space.mp3",          // an unescaped space never comes out of a listing
+		"/media/track.mp3?x=1",           // no query string
+		"https://evil.example/track.mp3", // absolute URLs are never a deck source
+		"/media/" + strings.Repeat("a", 400),
+	}
+	for _, p := range bad {
+		if validMediaPath(p) {
+			t.Errorf("expected %q to be rejected", p)
+		}
+	}
+}
+
+func TestFileVideoSanitises(t *testing.T) {
+	v := sanitizeVideo(&Video{Source: SourceFile, URL: "/media/Some%20Track.mp3"}, "TestDJ")
+	if v == nil {
+		t.Fatal("a valid file video was rejected")
+	}
+	if v.Title != "Some Track" {
+		t.Errorf("title should fall back to the unescaped file name, got %q", v.Title)
+	}
+	if v.ID == "" || v.VideoID != "" || v.Thumb != "" {
+		t.Errorf("unexpected fields: id=%q videoId=%q thumb=%q", v.ID, v.VideoID, v.Thumb)
+	}
+	if sanitizeVideo(&Video{Source: SourceFile, URL: "https://evil.example/x.mp3"}, "") != nil {
+		t.Error("an absolute URL must not become a deck source")
+	}
+}
+
+func TestFileDeckRateIsContinuous(t *testing.T) {
+	d := newDeck("a")
+	d.Video = &Video{Source: SourceYouTube, VideoID: "dQw4w9WgXcQ"}
+	d.applyRate(1.03)
+	if d.RateActual != 1 {
+		t.Errorf("a YouTube deck must snap to the allowed list, got %v", d.RateActual)
+	}
+	d.Video = &Video{Source: SourceFile, URL: "/media/x.mp3"}
+	d.applyRate(1.03)
+	if d.RateActual != 1.03 {
+		t.Errorf("a file deck must honour the exact rate, got %v", d.RateActual)
 	}
 }

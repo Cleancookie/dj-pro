@@ -394,3 +394,41 @@
   border-color: var(--cue);
   box-shadow: 0 0 10px -3px var(--cue);
 }
+
+/* ---- local files ---- */
+.lib-files {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast), box-shadow var(--fast);
+}
+.lib-files:hover {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+.lib-files.is-on {
+  color: var(--live);
+  border-color: var(--live);
+  box-shadow: var(--bevel), 0 0 12px -4px var(--live);
+}
+.lib-files .lib-count {
+  margin-left: 6px;
+}
+.lib-file-glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 18px;
+  color: var(--ink-4);
+  background: var(--sunk);
+}

@@ -154,7 +154,8 @@ type helloFrame struct {
 
 type configView struct {
 	SearchEnabled bool      `json:"searchEnabled"`
-	DeckRates     []float64 `json:"deckRates"`
+	MediaEnabled  bool      `json:"mediaEnabled"`
+	DeckRates     []float64 `json:"deckRates"` // YouTube's fixed list; file decks ignore it
 }
 
 type roleFrame struct {
@@ -272,7 +273,11 @@ func (h *Hub) register(c *Client) {
 		ClientID:   c.id,
 		ServerTime: h.state.ServerNow,
 		State:      h.state,
-		Config:     configView{SearchEnabled: h.cfg.SearchEnabled(), DeckRates: AllowedRates},
+		Config: configView{
+			SearchEnabled: h.cfg.SearchEnabled(),
+			MediaEnabled:  h.cfg.MediaEnabled(),
+			DeckRates:     AllowedRates,
+		},
 	}))
 	h.touch()
 }
