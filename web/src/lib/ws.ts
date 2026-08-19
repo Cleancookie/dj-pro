@@ -193,6 +193,10 @@ export const conn = {
     }
     send({ t: 'identity', name });
   },
+  /** A listener asking for a track. The server decides whether it lands. */
+  request(video: { videoId: string; title?: string; author?: string; thumb?: string; durationSec?: number }): void {
+    send({ t: 'request', video });
+  },
   chat(text: string): void {
     const t = text.slice(0, 300);
     if (!t.trim()) return;

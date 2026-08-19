@@ -6,6 +6,7 @@ import { JoinGate } from '../components/audience/JoinGate';
 import { Stage } from '../components/audience/Stage';
 import { NowPlaying } from '../components/audience/NowPlaying';
 import { ReactionBar } from '../components/audience/ReactionBar';
+import { RequestBox } from '../components/audience/RequestBox';
 import { ChatRail, ChatSlice } from '../components/audience/ChatRail';
 import './Audience.css';
 
@@ -66,6 +67,7 @@ export function Audience() {
           <NowPlaying dominant={dominant} mixing={mixing} fullscreenRef={shellRef} />
           <ChatSlice hidden={chatOpen} />
           <ReactionBar />
+          <RequestBox />
         </main>
         <ChatRail open={chatOpen} onOpenChange={setChatOpen} />
       </div>

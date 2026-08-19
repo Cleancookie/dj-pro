@@ -56,7 +56,7 @@ func TestNewRoomStateDefaults(t *testing.T) {
 	if s.Mixer.Master <= 0 || s.Mixer.Master > 1 {
 		t.Errorf("master = %v, want 0<x<=1", s.Mixer.Master)
 	}
-	if s.Queue == nil || s.Chat == nil {
-		t.Error("queue and chat must be non-nil so they marshal as [] not null")
+	if s.Crate == nil || s.Requests == nil || s.Chat == nil {
+		t.Error("crate, requests and chat must be non-nil so they marshal as [] not null")
 	}
 }

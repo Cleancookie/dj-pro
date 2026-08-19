@@ -40,6 +40,7 @@ every play / pause / seek / rate change. `serverNow = Date.now() + clockOffsetMs
 | `identity` | `{ name }` |
 | `chat` | `{ text }` (max 300 chars) |
 | `reaction` | `{ kind }` |
+| `request` | `{ video }` — anyone may ask for a track; lands in `requests`, never in the crate |
 | `cmd` | `{ action, ...args }` — DJ only; rejected with `denied` otherwise |
 
 ### DJ commands (`cmd.action`)
@@ -65,14 +66,31 @@ mixer.crossfade  { value }                    // -1 (full A) .. 1 (full B)
 mixer.master     { value }                    // 0..1
 mixer.transition { kind:"cut"|"crossfade"|"fadeThrough"|"bassSwap", durationMs }
 mixer.fire       { to:"a"|"b" }               // run the configured transition toward a deck
-queue.add        { video }
-queue.addMany    { videos }                   // bulk-add, order preserved
-queue.plan       { id, plan: {kind?,durationMs?,cueIn?,cueOut?} }  // pre-arrange how an item mixes IN
+crate.add        { video }
+crate.addMany    { videos }                   // bulk-add, order preserved
+crate.plan       { id, plan: {kind?,durationMs?,cueIn?,cueOut?} }  // pre-arrange how an item mixes IN
 autodj.set       { enabled }                  // hand the set over to the server, or take it back
-queue.remove     { id }
-queue.move       { id, index }
-queue.load       { id, deck }                 // pop from queue into a deck
+crate.remove     { id }
+crate.move       { id, index }
+crate.load       { id, deck }                 // load into a deck; the item STAYS, stamped playedAt
+crate.reset      { id? }                      // clear playedAt (whole crate if id is omitted)
+request.approve  { id, index? }               // move a crowd request into the crate
+request.reject   { id }
 room.title       { title }
+```
+The `queue.*` names these commands used to carry are still accepted as aliases of `crate.*`.
+
+### The crate and the request list
+```
+crate     Video[]   the DJ's ordered pool. NOT consumed as it plays: loading a track stamps
+                    `playedAt` and leaves it in place, so the crate reads as the set that was
+                    played and can be reset for another lap. Auto-advance walks it, taking the
+                    first item with `playedAt == 0`.
+requests  Video[]   what the room has asked for, kept apart from the crate on purpose. The only
+                    state a listener can write, and only through the `request` frame: server-side
+                    it is capped (60 in the list, 3 per listener), rate-limited (15s per listener),
+                    de-duplicated against the request list and the unplayed crate, and stripped of
+                    any plan or client-chosen id. Never persisted.
 ```
 
 ## HTTP
@@ -97,12 +115,13 @@ flush tick. Nothing new is streamed — it simply issues the same mutations the 
    fires toward the prepped deck using the incoming item's `plan.kind` (falling back to
    `mixer.transitionKind`).
 2. **Rotate.** Once the automation completes, the outgoing deck is paused and ejected, the next
-   queue item is loaded onto it paused at its `plan.cueIn`, and its `cueOut` is applied. So there is
+   unplayed crate item is loaded onto it paused at its `plan.cueIn`, and its `cueOut` applied (it is
+   stamped `playedAt` as it goes, which is what advances the cursor). So there is
    always exactly one live deck and one prepped deck, and every client has the next track buffered
    and anchored before it is ever audible.
-3. **Cold start.** If auto-advance is enabled with nothing playing, the first queue item is loaded,
+3. **Cold start.** If auto-advance is enabled with nothing playing, the first unplayed crate item is loaded,
    started at its `cueIn`, and the crossfader is moved to that deck.
-4. **The DJ always wins.** Any manual `mixer.crossfade`, `deck.load`, `deck.pause` or `queue.load`
+4. **The DJ always wins.** Any manual `mixer.crossfade`, `deck.load`, `deck.pause` or `crate.load`
    takes effect immediately; a manual crossfade also cancels the running automation as it always
    has. Auto-advance picks up from whatever state it finds on the next tick.
 

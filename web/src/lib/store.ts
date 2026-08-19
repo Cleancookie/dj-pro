@@ -54,6 +54,8 @@ interface StoreState {
   bursts: Burst[];
   monitor: MonitorPrefs;
   clientId: string;
+  /** The last thing the server refused, so a UI can say why instead of failing silently. */
+  error: { message: string; at: number } | null;
 }
 
 let state: StoreState = {
@@ -65,6 +67,7 @@ let state: StoreState = {
   bursts: [],
   monitor: loadMonitor(),
   clientId: '',
+  error: null,
 };
 
 const subs = new Set<() => void>();
@@ -196,9 +199,11 @@ onMsg((msg) => {
       break;
     case 'error':
       console.warn('[server error]', msg.message);
+      patch({ error: { message: msg.message, at: Date.now() } });
       break;
     case 'denied':
       console.warn('[server denied]', msg.message);
+      patch({ error: { message: msg.message, at: Date.now() } });
       break;
     default:
       break;
@@ -236,7 +241,8 @@ const eqVideo = (a: Video | null, b: Video | null): boolean =>
     a.thumb === b.thumb &&
     a.durationSec === b.durationSec &&
     a.addedBy === b.addedBy &&
-    // The mix plan is part of a queue item's identity for UI purposes: editing how a track will be
+    a.playedAt === b.playedAt &&
+    // The mix plan is part of a crate item's identity for UI purposes: editing how a track will be
     // brought in must re-render the row, even though nothing else about the track changed.
     // Optional-chained on purpose: an equality helper runs during render, so a Video that somehow
     // arrives without a plan must compare false rather than throw and blank the page.
@@ -281,7 +287,7 @@ const eqMixer = (a: Mixer | null, b: Mixer | null): boolean =>
     a.auto.durationMs === b.auto.durationMs &&
     a.auto.curve === b.auto.curve);
 
-const eqQueue = (a: Video[], b: Video[]): boolean => {
+const eqVideos = (a: Video[], b: Video[]): boolean => {
   if (a === b) return true;
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (!eqVideo(a[i], b[i])) return false;
@@ -321,7 +327,8 @@ const selRoom = (s: StoreState) => s.room;
 const selRole = (s: StoreState) => s.role;
 const selConfig = (s: StoreState) => s.config;
 const selStatus = (s: StoreState) => s.status;
-const selQueue = (s: StoreState) => s.room?.queue ?? EMPTY_VIDEOS;
+const selCrate = (s: StoreState) => s.room?.crate ?? EMPTY_VIDEOS;
+const selRequests = (s: StoreState) => s.room?.requests ?? EMPTY_VIDEOS;
 const selChat = (s: StoreState) => s.chat;
 const selListeners = (s: StoreState) => s.room?.listeners ?? EMPTY_LISTENERS;
 const selMixer = (s: StoreState): Mixer | null => s.room?.mixer ?? null;
@@ -330,6 +337,7 @@ const selMonitor = (s: StoreState) => s.monitor;
 const selTitle = (s: StoreState) => s.room?.title ?? '';
 const selDjOnline = (s: StoreState) => s.room?.djOnline ?? false;
 const selClientId = (s: StoreState) => s.clientId;
+const selError = (s: StoreState) => s.error;
 
 /** The whole snapshot. Re-renders on every mutation — prefer a narrower hook. */
 export function useRoom(): RoomState | null {
@@ -345,8 +353,14 @@ export function useMixer(): Mixer | null {
   return useSlice(selMixer, eqMixer);
 }
 
-export function useQueue(): Video[] {
-  return useSlice(selQueue, eqQueue);
+/** The DJ's crate, in order. Played items stay put — check `playedAt`. */
+export function useCrate(): Video[] {
+  return useSlice(selCrate, eqVideos);
+}
+
+/** What the room has asked for, awaiting the DJ's nod. */
+export function useRequests(): Video[] {
+  return useSlice(selRequests, eqVideos);
 }
 
 export function useChat(): ChatMsg[] {
@@ -384,6 +398,11 @@ export function useDjOnline(): boolean {
 
 export function useClientId(): string {
   return useSlice(selClientId);
+}
+
+/** The server's last refusal. `at` changes even when the same message repeats. */
+export function useServerError(): { message: string; at: number } | null {
+  return useSlice(selError);
 }
 
 export function useMonitor(): [MonitorPrefs, (p: Partial<MonitorPrefs>) => void] {

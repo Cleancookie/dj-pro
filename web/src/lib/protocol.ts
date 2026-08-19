@@ -7,18 +7,19 @@ export type TransitionKind = 'cut' | 'crossfade' | 'fadeThrough' | 'bassSwap';
 export type ReactionKind = 'woot' | 'meh' | 'fire' | 'heart';
 
 export interface Video {
-  id: string;          // queue-entry id
+  id: string;          // crate/request entry id
   videoId: string;     // YouTube id
   title: string;
   author: string;
   thumb: string;
   durationSec: number; // 0 until reported by a player
   addedBy: string;
+  playedAt: number;    // server ms it was last loaded to a deck; 0 = never played
   plan: Plan;          // how this track should come IN
 }
 
 /**
- * A queue item's pre-arranged mix instructions. Zero values mean "inherit the mixer default", so an
+ * A crate item's pre-arranged mix instructions. Zero values mean "inherit the mixer default", so an
  * unplanned item still behaves sensibly. This is what lets the DJ plan track 8's landing while
  * track 3 is still playing.
  */
@@ -66,7 +67,7 @@ export interface Mixer {
   auto: Automation;
 }
 
-/** Server-driven set progression: fires each item's planned transition and rotates the queue. */
+/** Server-driven set progression: fires each item's planned transition and rotates the decks. */
 export interface AutoDJ { enabled: boolean }
 
 export interface Listener { id: string; name: string; role: Role }
@@ -77,7 +78,10 @@ export interface RoomState {
   decks: [Deck, Deck];
   mixer: Mixer;
   autoDj: AutoDJ;
-  queue: Video[];
+  /** The DJ's own ordered pool. Not consumed as it plays - items are stamped `playedAt`. */
+  crate: Video[];
+  /** What the room has asked for, kept separate so it cannot muddy the DJ's own thinking. */
+  requests: Video[];
   listeners: Listener[];
   chat: ChatMsg[];
   djOnline: boolean;
@@ -120,13 +124,16 @@ export type Cmd =
   | { action: 'mixer.master'; value: number }
   | { action: 'mixer.transition'; kind: TransitionKind; durationMs: number }
   | { action: 'mixer.fire'; to: DeckId }
-  | { action: 'queue.add'; video: Video }
-  | { action: 'queue.addMany'; videos: Video[] }
-  | { action: 'queue.plan'; id: string; plan: Partial<Plan> }
+  | { action: 'crate.add'; video: Video }
+  | { action: 'crate.addMany'; videos: Video[] }
+  | { action: 'crate.plan'; id: string; plan: Partial<Plan> }
   | { action: 'autodj.set'; enabled: boolean }
-  | { action: 'queue.remove'; id: string }
-  | { action: 'queue.move'; id: string; index: number }
-  | { action: 'queue.load'; id: string; deck: DeckId }
+  | { action: 'crate.remove'; id: string }
+  | { action: 'crate.move'; id: string; index: number }
+  | { action: 'crate.load'; id: string; deck: DeckId }
+  | { action: 'crate.reset'; id?: string }
+  | { action: 'request.approve'; id: string; index?: number }
+  | { action: 'request.reject'; id: string }
   | { action: 'room.title'; title: string };
 
 export const DECK_IDS: DeckId[] = ['a', 'b'];

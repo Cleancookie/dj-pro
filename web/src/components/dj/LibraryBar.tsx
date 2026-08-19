@@ -106,7 +106,7 @@ export function LibraryBar() {
     [],
   );
 
-  /** Resolve a whole pasted list, then add every success in one queue.addMany. */
+  /** Resolve a whole pasted list, then add every success in one crate.addMany. */
   const runBulk = async (tokens: string[]) => {
     abort.current?.abort();
     const ctl = new AbortController();
@@ -127,7 +127,7 @@ export function LibraryBar() {
       if (ctl.signal.aborted) return;
       const videos = found.filter((v): v is Video => v !== null);
       // The ones that worked go in regardless of the ones that did not.
-      if (videos.length > 0) cmd({ action: 'queue.addMany', videos });
+      if (videos.length > 0) cmd({ action: 'crate.addMany', videos });
       setBulkDone({ added: videos.length, failed: tokens.length - videos.length });
       setQueued((prev) => {
         const next = new Set(prev);
@@ -189,7 +189,7 @@ export function LibraryBar() {
 
   const load = (video: Video, deck: DeckId) => cmd({ action: 'deck.load', deck, video });
   const enqueue = (video: Video) => {
-    cmd({ action: 'queue.add', video });
+    cmd({ action: 'crate.add', video });
     setQueued((prev) => (prev.includes(video.videoId) ? prev : [...prev, video.videoId]));
   };
 
@@ -264,7 +264,7 @@ export function LibraryBar() {
           disabled={!q.trim() || busy}
           title={
             tokenCount > 1
-              ? `Resolve all ${tokenCount} links and add them to the queue`
+              ? `Resolve all ${tokenCount} links and add them to the crate`
               : 'Resolve or search (Enter)'
           }
         >
@@ -305,7 +305,7 @@ export function LibraryBar() {
               </span>
               {bulkDone && (
                 <>
-                  <span className="lib-bulk-ok">+{bulkDone.added} queued</span>
+                  <span className="lib-bulk-ok">+{bulkDone.added} crated</span>
                   {bulkDone.failed > 0 && <span className="lib-bulk-bad">{bulkDone.failed} failed</span>}
                 </>
               )}
@@ -342,7 +342,7 @@ export function LibraryBar() {
         )}
         {!bulk && !busy && !hint && !error && results.length === 0 && (
           <p className="lib-note">
-            Drop a link in here to resolve it, then send it to a deck or the queue. Paste a whole list — one per line
+            Drop a link in here to resolve it, then send it to a deck or the crate. Paste a whole list — one per line
             or comma separated — to build a set in one go. Nothing loads onto a deck until you say so.
           </p>
         )}
@@ -374,10 +374,10 @@ export function LibraryBar() {
                   <button
                     type="button"
                     className={`lib-act is-queue${queued.includes(v.videoId) ? ' is-done' : ''}`}
-                    title="Add to the end of the queue"
+                    title="Add to the end of the crate"
                     onClick={() => enqueue(v)}
                   >
-                    {queued.includes(v.videoId) ? '✓ Queued' : '+ Queue'}
+                    {queued.includes(v.videoId) ? '✓ In crate' : '+ Crate'}
                   </button>
                 </div>
               </article>

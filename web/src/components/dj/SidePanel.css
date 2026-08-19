@@ -135,6 +135,22 @@
   color: var(--warn);
   cursor: help;
 }
+.sp-qstat-played {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast);
+}
+.sp-qstat-played:hover {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
 .sp-qstat-auto {
   font-size: 8px;
   font-weight: 700;
@@ -254,6 +270,12 @@
 .sp-item.is-dragging .sp-row {
   cursor: grabbing;
 }
+.sp-item.is-played .sp-row {
+  opacity: 0.55;
+}
+.sp-item.is-played:hover .sp-row {
+  opacity: 1;
+}
 .sp-item.is-planned .sp-row {
   box-shadow: var(--sh-1), inset 2px 0 0 var(--cue);
 }
@@ -318,6 +340,18 @@
 .sp-row-by {
   color: var(--ink-4);
 }
+.sp-row-played {
+  flex: 0 0 auto;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0 3px;
+  line-height: 11px;
+  border-radius: 2px;
+  color: var(--ink-3);
+  border: 1px solid var(--line-2);
+}
 .sp-row-flag {
   flex: 0 0 auto;
   font-size: 7px;
@@ -378,6 +412,21 @@
   border-color: var(--deck);
   box-shadow: var(--bevel), 0 0 10px -3px var(--deck);
 }
+.sp-replay {
+  width: 20px;
+  height: 22px;
+  font-size: 11px;
+  color: var(--ink-4);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast);
+}
+.sp-replay:hover {
+  color: var(--cue);
+  border-color: var(--cue);
+}
 .sp-x {
   width: 20px;
   height: 22px;
@@ -394,6 +443,8 @@
   border-color: var(--hot);
 }
 .sp-load:focus-visible,
+.sp-replay:focus-visible,
+.sp-req-ok:focus-visible,
 .sp-x:focus-visible,
 .sp-chev:focus-visible {
   outline: 1px solid var(--deck, var(--cue));
@@ -809,4 +860,48 @@
 }
 .sp-person.is-dj .sp-person-name {
   color: var(--ink);
+}
+
+/* ---- the crowd's requests ---- */
+.sp-reqs {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 6px;
+  list-style: none;
+}
+.sp-req {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+}
+.sp-req + .sp-req {
+  margin-top: 4px;
+}
+.sp-req-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.sp-req-ok {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  color: var(--live);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: border-color var(--fast), box-shadow var(--fast);
+}
+.sp-req-ok:hover {
+  border-color: var(--live);
+  box-shadow: 0 0 10px -3px var(--live);
 }

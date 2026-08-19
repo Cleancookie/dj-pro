@@ -2,21 +2,28 @@ package main
 
 import "sync"
 
-// Video is a loadable YouTube track.
+// Video is a loadable YouTube track: one entry in the crate, in the request list, or on a deck.
+// Loading does not copy - the deck holds the very same pointer the crate does, so a duration
+// reported by a client, or a plan the DJ edits mid-track, is visible from both.
 type Video struct {
-	ID          string  `json:"id"`      // queue-entry id (uuid-ish), unique per queue item
+	ID          string  `json:"id"`      // entry id (uuid-ish), unique per crate/request item
 	VideoID     string  `json:"videoId"` // YouTube video id
 	Title       string  `json:"title"`
 	Author      string  `json:"author"`
 	Thumb       string  `json:"thumb"`
 	DurationSec float64 `json:"durationSec"` // 0 until a client reports it
 	AddedBy     string  `json:"addedBy"`
-	Plan        Plan    `json:"plan"` // how this track should come IN
+	PlayedAt    int64   `json:"playedAt"` // server epoch ms it was last loaded to a deck; 0 = never
+	Plan        Plan    `json:"plan"`     // how this track should come IN
+
+	// byClient is the request author's client id. Unexported: it is nobody's business but the
+	// server's, and it exists only to enforce the per-listener request cap.
+	byClient string
 }
 
-// Plan is a queue item's pre-arranged mix instructions: how this track should be brought in and
+// Plan is a crate item's pre-arranged mix instructions: how this track should be brought in and
 // where it should start and end. The DJ can set these up long before the track plays, which is the
-// point of a queue - you sort out track 8's landing while track 3 is still going.
+// point of a planned crate - you sort out track 8's landing while track 3 is still going.
 // Zero values mean "inherit the mixer default", so an unplanned item still behaves sensibly.
 type Plan struct {
 	Kind       string  `json:"kind"`       // "" = use Mixer.TransitionKind
@@ -81,18 +88,23 @@ type ChatMsg struct {
 }
 
 // AutoDJ drives the set forward without the DJ touching anything: when the live deck approaches
-// its out point, the server fires the incoming track's planned transition and rotates the queue.
+// its out point, the server fires the incoming track's planned transition and rotates the decks.
 // The DJ can always override - any manual crossfade, load or pause wins.
 type AutoDJ struct {
 	Enabled bool `json:"enabled"`
 }
 
 type RoomState struct {
-	Title     string     `json:"title"`
-	Decks     [2]*Deck   `json:"decks"` // index 0 = "a", 1 = "b"
-	Mixer     Mixer      `json:"mixer"`
-	AutoDJ    AutoDJ     `json:"autoDj"`
-	Queue     []*Video   `json:"queue"`
+	Title  string   `json:"title"`
+	Decks  [2]*Deck `json:"decks"` // index 0 = "a", 1 = "b"
+	Mixer  Mixer    `json:"mixer"`
+	AutoDJ AutoDJ   `json:"autoDj"`
+	// Crate is the DJ's own ordered pool. Unlike a queue it is not consumed: playing a track
+	// stamps PlayedAt and leaves it in place, so a set can be replayed and auto-advance simply
+	// walks to the next unplayed entry. Requests is the crowd's separate, unplanned list - kept
+	// apart deliberately so the room cannot reorder the DJ's thinking.
+	Crate     []*Video   `json:"crate"`
+	Requests  []*Video   `json:"requests"`
 	Listeners []Listener `json:"listeners"`
 	Chat      []ChatMsg  `json:"chat"` // last 60
 	DJOnline  bool       `json:"djOnline"`
@@ -123,11 +135,12 @@ func SnapRate(r float64) float64 {
 
 func NewRoomState() *RoomState {
 	return &RoomState{
-		Title: "DJ Pro",
-		Decks: [2]*Deck{newDeck("a"), newDeck("b")},
-		Mixer: Mixer{Crossfade: -1, Master: 0.85, TransitionKind: "crossfade", TransitionMs: 8000},
-		Queue: []*Video{},
-		Chat:  []ChatMsg{},
+		Title:    "DJ Pro",
+		Decks:    [2]*Deck{newDeck("a"), newDeck("b")},
+		Mixer:    Mixer{Crossfade: -1, Master: 0.85, TransitionKind: "crossfade", TransitionMs: 8000},
+		Crate:    []*Video{},
+		Requests: []*Video{},
+		Chat:     []ChatMsg{},
 	}
 }
 

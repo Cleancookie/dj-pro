@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Deck, DeckId } from '../../lib/protocol';
-import { cmd, useListeners, useQueue, useRoom } from '../../lib/store';
+import { cmd, useCrate, useListeners, useRoom } from '../../lib/store';
 import { deckPosition, fmtTime, mainGain } from '../../lib/deckmath';
 import { clock } from '../../lib/clock';
 import { KIND_LABEL, effectiveKind, effectiveMs } from './MixerColumn';
@@ -23,7 +23,9 @@ export function TopBar({ onShortcuts, onFullscreen, fullscreen }: TopBarProps) {
   const deckB = room?.decks[1] ?? null;
   const mixer = room?.mixer ?? null;
   const listeners = useListeners();
-  const queue = useQueue();
+  const crate = useCrate();
+  /* What auto-advance can still reach: played items stay in the crate but are out of its path. */
+  const upNext = crate.filter((v) => v.playedAt === 0);
   const autoDj = room?.autoDj.enabled ?? false;
 
   const [live, setLive] = useState(false);
@@ -57,11 +59,11 @@ export function TopBar({ onShortcuts, onFullscreen, fullscreen }: TopBarProps) {
   const phase: 'off' | 'idle' | 'coldstart' | 'rotating' | 'ending' | 'armed' = !autoDj
     ? 'off'
     : !liveDeck
-      ? queue.length > 0
+      ? upNext.length > 0
         ? 'coldstart'
         : 'idle'
       : !incoming
-        ? queue.length > 0
+        ? upNext.length > 0
           ? 'rotating'
           : 'ending'
         : 'armed';
@@ -207,14 +209,14 @@ export function TopBar({ onShortcuts, onFullscreen, fullscreen }: TopBarProps) {
         </button>
         <span className="tb-next">
           {phase === 'off' && <span className="tb-next-off">you are driving</span>}
-          {phase === 'idle' && <span className="tb-next-warn">queue is empty</span>}
+          {phase === 'idle' && <span className="tb-next-warn">nothing unplayed in the crate</span>}
           {phase === 'coldstart' && (
             <span className="tb-next-warn">
-              starting <b>{queue[0]?.title ?? 'next track'}</b>
+              starting <b>{upNext[0]?.title ?? 'next track'}</b>
             </span>
           )}
           {phase === 'rotating' && <span className="tb-next-warn">loading next…</span>}
-          {phase === 'ending' && <span className="tb-next-warn">last track — queue is empty</span>}
+          {phase === 'ending' && <span className="tb-next-warn">last track — nothing unplayed left</span>}
           {phase === 'armed' && (
             <>
               <span className="tb-next-label">next</span>

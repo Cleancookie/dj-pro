@@ -26,7 +26,7 @@ const (
 	maxPlanMs = 30_000
 
 	maxTrackSec = 24 * 3600
-	maxBatchAdd = 100 // one queue.addMany frame; the 32KB socket read limit is the real bound
+	maxBatchAdd = 100 // one crate.addMany frame; the 32KB socket read limit is the real bound
 )
 
 // --- deck position anchoring ----------------------------------------------
@@ -140,7 +140,7 @@ type cmdFrame struct {
 	Enabled bool       `json:"enabled"`
 }
 
-// planPatch is a PARTIAL update of a queue item's Plan. Every field is a pointer so an omitted
+// planPatch is a PARTIAL update of a crate item's Plan. Every field is a pointer so an omitted
 // key leaves the stored value alone - the DJ tweaking only the duration must not silently wipe
 // the cue points they set five minutes ago.
 type planPatch struct {
@@ -170,6 +170,11 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 		}
 		h.deckCmd(c, d, &f, now)
 		return
+	}
+
+	// `queue.*` was this list's name before it became a crate. Old clients still speak it.
+	if strings.HasPrefix(f.Action, "queue.") {
+		f.Action = "crate." + f.Action[len("queue."):]
 	}
 
 	switch f.Action {
@@ -208,9 +213,9 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 		h.cancelRotation() // a manual fire is not the automation auto-advance was waiting on
 		h.startTransition(f.To, "", 0, now)
 
-	case "queue.add":
-		if len(h.state.Queue) >= maxQueueLen {
-			h.sendTo(c, encode(messageFrame{T: "error", Message: "queue is full"}))
+	case "crate.add":
+		if len(h.state.Crate) >= maxCrateLen {
+			h.sendTo(c, encode(messageFrame{T: "error", Message: "the crate is full"}))
 			return
 		}
 		v := sanitizeVideo(f.Video, c.name)
@@ -218,10 +223,10 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 			h.sendTo(c, encode(messageFrame{T: "error", Message: "invalid video"}))
 			return
 		}
-		h.state.Queue = append(h.state.Queue, v)
+		h.state.Crate = append(h.state.Crate, v)
 		h.touchPersist()
 
-	case "queue.addMany":
+	case "crate.addMany":
 		if len(f.Videos) == 0 {
 			return
 		}
@@ -230,7 +235,7 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 		}
 		added, skipped, full := 0, 0, false
 		for _, raw := range f.Videos {
-			if len(h.state.Queue) >= maxQueueLen {
+			if len(h.state.Crate) >= maxCrateLen {
 				full = true
 				break
 			}
@@ -239,21 +244,21 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 				skipped++
 				continue // one bad row must not lose the rest of the playlist
 			}
-			h.state.Queue = append(h.state.Queue, v) // order preserved
+			h.state.Crate = append(h.state.Crate, v) // order preserved
 			added++
 		}
 		if added > 0 {
 			h.touchPersist()
 		}
 		if full {
-			h.sendTo(c, encode(messageFrame{T: "error", Message: "queue is full"}))
+			h.sendTo(c, encode(messageFrame{T: "error", Message: "the crate is full"}))
 		} else if skipped > 0 {
 			h.sendTo(c, encode(messageFrame{T: "error",
 				Message: fmt.Sprintf("added %d, skipped %d unusable video(s)", added, skipped)}))
 		}
 
-	case "queue.plan":
-		h.planQueueItem(c, f.ID, f.Plan)
+	case "crate.plan":
+		h.planCrateItem(c, f.ID, f.Plan)
 
 	case "autodj.set":
 		if h.state.AutoDJ.Enabled == f.Enabled {
@@ -270,32 +275,73 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 		}
 		h.touchPersist()
 
-	case "queue.remove":
-		if _, ok := h.takeFromQueue(f.ID); !ok {
+	case "crate.remove":
+		if _, ok := h.takeFromCrate(f.ID); !ok {
 			return
 		}
 		h.touchPersist()
 
-	case "queue.move":
+	case "crate.move":
 		if f.Index == nil {
 			return
 		}
-		h.moveInQueue(f.ID, *f.Index)
+		h.moveInCrate(f.ID, *f.Index)
 
-	case "queue.load":
+	case "crate.load":
 		if !validDeck(f.Deck) {
 			h.sendTo(c, encode(messageFrame{T: "error", Message: "unknown deck"}))
 			return
 		}
-		v, ok := h.takeFromQueue(f.ID)
-		if !ok {
+		v := h.crateItem(f.ID)
+		if v == nil {
 			return
 		}
 		if h.rotateDeck == f.Deck {
 			h.cancelRotation() // the DJ just filled this deck by hand
 		}
+		// The item STAYS in the crate - it is a library, not a queue. Stamping it played is what
+		// takes it out of auto-advance's path.
+		v.PlayedAt = now
 		h.loadDeck(h.deck(f.Deck), v, nil, now)
 		h.touchPersist()
+
+	case "crate.reset":
+		// Put tracks back in auto-advance's path. No id = the whole crate, for a second lap.
+		changed := false
+		for _, v := range h.state.Crate {
+			if (f.ID == "" || v.ID == f.ID) && v.PlayedAt != 0 {
+				v.PlayedAt = 0
+				changed = true
+			}
+		}
+		if !changed {
+			return
+		}
+		h.touchPersist()
+
+	case "request.approve":
+		if len(h.state.Crate) >= maxCrateLen {
+			h.sendTo(c, encode(messageFrame{T: "error", Message: "the crate is full"}))
+			return
+		}
+		v, ok := h.takeFromRequests(f.ID)
+		if !ok {
+			return
+		}
+		at := len(h.state.Crate)
+		if f.Index != nil {
+			at = clampInt(*f.Index, 0, len(h.state.Crate))
+		}
+		h.state.Crate = append(h.state.Crate, nil)
+		copy(h.state.Crate[at+1:], h.state.Crate[at:])
+		h.state.Crate[at] = v
+		h.touchPersist()
+
+	case "request.reject":
+		if _, ok := h.takeFromRequests(f.ID); !ok {
+			return
+		}
+		h.touch()
 
 	case "room.title":
 		t := sanitizeText(f.Title, maxTitleLen)
@@ -639,7 +685,7 @@ func (h *Hub) autoAdvance(now int64) {
 	if live.derived(now) < out-float64(dur)/1000 {
 		return
 	}
-	// Idempotence: the tick runs 20x/sec, so fire at most once per (deck, queue item).
+	// Idempotence: the tick runs 20x/sec, so fire at most once per (deck, crate item).
 	if h.autoFiredDeck == live.ID && h.autoFiredItem == live.Video.ID {
 		return
 	}
@@ -653,7 +699,7 @@ func (h *Hub) autoAdvance(now int64) {
 }
 
 // rotate recycles the deck the set has just faded away from: pause, eject, then hand it the next
-// queue item parked at that item's cue-in. An empty queue simply leaves it ejected.
+// unplayed crate item parked at that item's cue-in. An exhausted crate simply leaves it ejected.
 func (h *Hub) rotate(now int64) {
 	d := h.deck(h.rotateDeck)
 	h.cancelRotation()
@@ -668,22 +714,24 @@ func (h *Hub) rotate(now int64) {
 	h.prepNext(d, now)
 }
 
-// prepNext loads the head of the queue onto an empty deck, paused and anchored at its planned
-// cue-in with its planned cue-out applied.
+// prepNext loads the next unplayed crate item onto an empty deck, paused and anchored at its
+// planned cue-in with its planned cue-out applied. The item is stamped played rather than
+// removed, so the crate still reads as the set that was played.
 func (h *Hub) prepNext(d *Deck, now int64) {
-	if d == nil || d.Video != nil || len(h.state.Queue) == 0 {
+	if d == nil || d.Video != nil {
 		return
 	}
-	v, taken := h.takeFromQueue(h.state.Queue[0].ID)
-	if !taken {
+	v := h.nextUnplayed()
+	if v == nil {
 		return
 	}
+	v.PlayedAt = now
 	h.loadDeck(d, v, nil, now)
 	h.touchPersist()
 }
 
 // coldStart gets a silent room moving: start whatever the DJ already cued up, or else pull the
-// first queue item, and put the crossfader hard over on that deck.
+// first unplayed crate item, and put the crossfader hard over on that deck.
 func (h *Hub) coldStart(now int64) {
 	if !h.coldStartArmed {
 		return // the DJ paused deliberately - do not undo that
@@ -693,8 +741,8 @@ func (h *Hub) coldStart(now int64) {
 		target = h.state.Decks[1] // respect a deck the DJ has already loaded
 	}
 	if target.Video == nil {
-		if len(h.state.Queue) == 0 {
-			return // nothing to play; stay armed until something is queued
+		if h.nextUnplayed() == nil {
+			return // nothing to play; stay armed until something lands in the crate
 		}
 		h.prepNext(target, now)
 		if target.Video == nil {
@@ -715,22 +763,16 @@ func (h *Hub) coldStart(now int64) {
 	log.Printf("auto-advance: cold start on deck %s", target.ID)
 }
 
-// planQueueItem applies a PARTIAL plan update to one queue item. Absent JSON fields are left
+// planCrateItem applies a PARTIAL plan update to one crate item. Absent JSON fields are left
 // exactly as they were; the merged result is validated as a whole, and an invalid patch changes
 // nothing at all.
-func (h *Hub) planQueueItem(c *Client, id string, patch *planPatch) {
+func (h *Hub) planCrateItem(c *Client, id string, patch *planPatch) {
 	if patch == nil {
 		return
 	}
-	var item *Video
-	for _, v := range h.state.Queue {
-		if v.ID == id {
-			item = v
-			break
-		}
-	}
+	item := h.crateItem(id)
 	if item == nil {
-		h.sendTo(c, encode(messageFrame{T: "error", Message: "no such queue item"}))
+		h.sendTo(c, encode(messageFrame{T: "error", Message: "no such crate item"}))
 		return
 	}
 
@@ -774,24 +816,47 @@ func (h *Hub) planQueueItem(c *Client, id string, patch *planPatch) {
 	h.touchPersist()
 }
 
-// --- queue helpers ---------------------------------------------------------
+// --- crate helpers ---------------------------------------------------------
 
-func (h *Hub) takeFromQueue(id string) (*Video, bool) {
+func (h *Hub) crateItem(id string) *Video {
+	if id == "" {
+		return nil
+	}
+	for _, v := range h.state.Crate {
+		if v.ID == id {
+			return v
+		}
+	}
+	return nil
+}
+
+// nextUnplayed is auto-advance's cursor: the first crate item that has not been on a deck yet.
+// Nothing is removed as the set runs, so this is what "the top of the queue" used to mean.
+func (h *Hub) nextUnplayed() *Video {
+	for _, v := range h.state.Crate {
+		if v.PlayedAt == 0 {
+			return v
+		}
+	}
+	return nil
+}
+
+func (h *Hub) takeFromCrate(id string) (*Video, bool) {
 	if id == "" {
 		return nil, false
 	}
-	for i, v := range h.state.Queue {
+	for i, v := range h.state.Crate {
 		if v.ID == id {
-			h.state.Queue = append(h.state.Queue[:i:i], h.state.Queue[i+1:]...)
+			h.state.Crate = append(h.state.Crate[:i:i], h.state.Crate[i+1:]...)
 			return v, true
 		}
 	}
 	return nil, false
 }
 
-func (h *Hub) moveInQueue(id string, index int) {
+func (h *Hub) moveInCrate(id string, index int) {
 	from := -1
-	for i, v := range h.state.Queue {
+	for i, v := range h.state.Crate {
 		if v.ID == id {
 			from = i
 			break
@@ -800,23 +865,96 @@ func (h *Hub) moveInQueue(id string, index int) {
 	if from < 0 {
 		return
 	}
-	if index < 0 {
-		index = 0
-	}
-	if index > len(h.state.Queue)-1 {
-		index = len(h.state.Queue) - 1
-	}
+	index = clampInt(index, 0, len(h.state.Crate)-1)
 	if index == from {
 		return
 	}
-	v := h.state.Queue[from]
-	rest := append(h.state.Queue[:from:from], h.state.Queue[from+1:]...)
+	v := h.state.Crate[from]
+	rest := append(h.state.Crate[:from:from], h.state.Crate[from+1:]...)
 	q := make([]*Video, 0, len(rest)+1)
 	q = append(q, rest[:index]...)
 	q = append(q, v)
 	q = append(q, rest[index:]...)
-	h.state.Queue = q
+	h.state.Crate = q
 	h.touchPersist()
+}
+
+// --- requests --------------------------------------------------------------
+
+func (h *Hub) takeFromRequests(id string) (*Video, bool) {
+	if id == "" {
+		return nil, false
+	}
+	for i, v := range h.state.Requests {
+		if v.ID == id {
+			h.state.Requests = append(h.state.Requests[:i:i], h.state.Requests[i+1:]...)
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// addRequest is the ONLY way a listener may write to room state, so every guard the crate takes
+// for granted has to be made explicit here: a cooldown, a per-listener cap, a list cap, and a
+// dedupe so the same track cannot be shouted for twice. Requests are never persisted - they
+// belong to the night that asked for them.
+func (h *Hub) addRequest(c *Client, raw *Video, now int64) {
+	if !h.clients[c] {
+		return
+	}
+	if len(h.state.Requests) >= maxRequests {
+		h.sendTo(c, encode(messageFrame{T: "error", Message: "the request list is full - give the DJ a minute"}))
+		return
+	}
+	if now-c.lastRequestAt < requestCooldownMs {
+		h.sendTo(c, encode(messageFrame{T: "error", Message: "one request at a time - hang on a moment"}))
+		return
+	}
+	pending := 0
+	for _, v := range h.state.Requests {
+		if v.byClient == c.id {
+			pending++
+		}
+	}
+	if pending >= maxRequestsPerClient {
+		h.sendTo(c, encode(messageFrame{T: "error", Message: "you already have a few in - wait for the DJ"}))
+		return
+	}
+	v := sanitizeVideo(raw, c.name)
+	if v == nil {
+		h.sendTo(c, encode(messageFrame{T: "error", Message: "invalid video"}))
+		return
+	}
+	// A listener does not get to pre-plan a mix, and must not be able to forge an id.
+	v.ID = newID()
+	v.Plan = Plan{}
+	v.PlayedAt = 0
+	v.AddedBy = c.name
+	v.byClient = c.id
+	if h.alreadyKnown(v.VideoID) {
+		h.sendTo(c, encode(messageFrame{T: "error", Message: "that one is already on the list"}))
+		return
+	}
+	h.state.Requests = append(h.state.Requests, v)
+	c.lastRequestAt = now
+	h.touch()
+}
+
+// alreadyKnown reports whether a video is pending anywhere the crowd can see: in the request
+// list, or waiting unplayed in the crate. A track the DJ has already played may be asked for
+// again - that is a compliment, not a duplicate.
+func (h *Hub) alreadyKnown(videoID string) bool {
+	for _, v := range h.state.Requests {
+		if v.VideoID == videoID {
+			return true
+		}
+	}
+	for _, v := range h.state.Crate {
+		if v.VideoID == videoID && v.PlayedAt == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // --- chat ------------------------------------------------------------------

@@ -1,13 +1,13 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { DeckId, Listener, Plan, TransitionKind, Video } from '../../lib/protocol';
-import { cmd, useChat, useListeners, useQueue, useRoom } from '../../lib/store';
+import { cmd, useChat, useListeners, useRequests, useRoom } from '../../lib/store';
 import { conn } from '../../lib/ws';
 import { fmtTime, fmtTimeMs } from '../../lib/deckmath';
 import { DEFAULT_KIND, DEFAULT_MS, KIND_LABEL } from './MixerColumn';
 import { Fader } from './Fader';
 import './SidePanel.css';
 
-type Tab = 'queue' | 'chat' | 'crowd';
+type Tab = 'crate' | 'requests' | 'chat' | 'crowd';
 
 /** Stable colour per listener id — data-derived, so it is not a design token. */
 function idHue(id: string) {
@@ -16,7 +16,7 @@ function idHue(id: string) {
   return h;
 }
 
-/* -------------------------------------------------------------------- queue */
+/* -------------------------------------------------------------------- crate */
 
 /** Rows past this are not rendered until asked for; the set can be enormous. */
 const PAGE = 80;
@@ -32,7 +32,7 @@ const PLAN_KINDS: { kind: TransitionKind | ''; label: string; title: string }[] 
   { kind: 'bassSwap', label: 'Bass', title: 'Bass swap' },
 ];
 
-/** Seconds a queue item will actually occupy, honouring its cue points. */
+/** Seconds a crate item will actually occupy, honouring its cue points. */
 function lengthOf(durationSec: number, cueIn: number, cueOut: number): number {
   const out = cueOut > 0 ? cueOut : durationSec;
   if (!(out > 0)) return 0;
@@ -60,7 +60,7 @@ function parseTime(raw: string): number | null {
   return mins * 60 + secs;
 }
 
-const sendPlan = (id: string, plan: Partial<Plan>) => cmd({ action: 'queue.plan', id, plan });
+const sendPlan = (id: string, plan: Partial<Plan>) => cmd({ action: 'crate.plan', id, plan });
 
 /* ---- a cue-point field that speaks m:ss ---- */
 
@@ -144,7 +144,7 @@ function PlanEditor({ id, index, count, planKind, planMs, planIn, planOut, defKi
     setPos(null);
     if (!Number.isFinite(n)) return;
     const to = Math.min(count - 1, Math.max(0, n - 1));
-    if (to !== index) cmd({ action: 'queue.move', id, index: to });
+    if (to !== index) cmd({ action: 'crate.move', id, index: to });
   };
 
   return (
@@ -214,7 +214,7 @@ function PlanEditor({ id, index, count, planKind, planMs, planIn, planOut, defKi
             className="sp-time-in num"
             value={pos ?? String(index + 1)}
             inputMode="numeric"
-            aria-label="Position in the queue"
+            aria-label="Position in the crate"
             onChange={(e) => setPos(e.target.value)}
             onBlur={movePos}
             onKeyDown={(e) => {
@@ -247,7 +247,7 @@ function PlanEditor({ id, index, count, planKind, planMs, planIn, planOut, defKi
   );
 }
 
-/* ---- one queue row -------------------------------------------------------
+/* ---- one crate row -------------------------------------------------------
  * Every prop is a primitive or a stable callback, so `memo` genuinely holds
  * even though the store hands out brand-new Video objects on every snapshot.
  */
@@ -258,6 +258,7 @@ interface RowProps extends PlanProps {
   thumb: string;
   durationSec: number;
   addedBy: string;
+  played: boolean;
   expanded: boolean;
   dragging: boolean;
   marker: 'before' | 'after' | null;
@@ -266,7 +267,7 @@ interface RowProps extends PlanProps {
   onRowDragOver: (index: number, clientY: number, rect: DOMRect) => void;
 }
 
-const QueueRow = memo(function QueueRow(p: RowProps) {
+const CrateRow = memo(function CrateRow(p: RowProps) {
   const planned = p.planKind !== '' || p.planMs > 0 || p.planIn > 0 || p.planOut > 0;
   const kind = p.planKind || p.defKind;
   const ms = p.planMs > 0 ? p.planMs : p.defMs;
@@ -279,7 +280,7 @@ const QueueRow = memo(function QueueRow(p: RowProps) {
     <li
       className={`sp-item${p.dragging ? ' is-dragging' : ''}${p.marker ? ` is-${p.marker}` : ''}${
         planned ? ' is-planned' : ''
-      }${p.expanded ? ' is-open' : ''}`}
+      }${p.played ? ' is-played' : ''}${p.expanded ? ' is-open' : ''}`}
       draggable
       onDragStart={(e) => {
         p.onDragStart(p.id);
@@ -322,6 +323,7 @@ const QueueRow = memo(function QueueRow(p: RowProps) {
           <span className="sp-row-title">{shownTitle}</span>
           <span className="sp-row-sub">
             {planned && <span className="sp-row-flag">plan</span>}
+            {p.played && <span className="sp-row-played">played</span>}
             {len > 0 && <span className="num">{fmtTime(len)}</span>}
             <span className="sp-row-who">{p.author || 'unknown'}</span>
             {p.addedBy ? <span className="sp-row-by">· {p.addedBy}</span> : null}
@@ -343,17 +345,28 @@ const QueueRow = memo(function QueueRow(p: RowProps) {
               type="button"
               className={`sp-load deck-${d}`}
               title={`Load "${shownTitle}" onto deck ${d.toUpperCase()} now`}
-              onClick={() => cmd({ action: 'queue.load', id: p.id, deck: d })}
+              onClick={() => cmd({ action: 'crate.load', id: p.id, deck: d })}
             >
               {d.toUpperCase()}
             </button>
           ))}
+          {p.played && (
+            <button
+              type="button"
+              className="sp-replay"
+              title={`Put "${shownTitle}" back in auto-advance's path`}
+              aria-label={`Mark ${shownTitle} unplayed`}
+              onClick={() => cmd({ action: 'crate.reset', id: p.id })}
+            >
+              ↺
+            </button>
+          )}
           <button
             type="button"
             className="sp-x"
-            title="Remove from queue"
-            aria-label={`Remove ${shownTitle} from the queue`}
-            onClick={() => cmd({ action: 'queue.remove', id: p.id })}
+            title="Remove from the crate"
+            aria-label={`Remove ${shownTitle} from the crate`}
+            onClick={() => cmd({ action: 'crate.remove', id: p.id })}
           >
             ✕
           </button>
@@ -379,15 +392,15 @@ const QueueRow = memo(function QueueRow(p: RowProps) {
 
 /* ---- the tab ---- */
 
-function QueueTab() {
+function CrateTab() {
   /*
-   * Sourced from useRoom() rather than useQueue() on purpose: the store's
-   * video equality check ignores `plan`, so useQueue() hands back a cached
+   * Sourced from useRoom() rather than useCrate() on purpose: the store's
+   * video equality check ignores `plan`, so useCrate() hands back a cached
    * array when only a plan changes and edits would never appear. useRoom()
    * is always the fresh snapshot; the memoised rows above absorb the cost.
    */
   const room = useRoom();
-  const queue = room?.queue ?? NO_VIDEOS;
+  const crate = room?.crate ?? NO_VIDEOS;
   const mixer = room?.mixer ?? null;
   const autoDj = room?.autoDj.enabled ?? false;
   const defKind = mixer?.transitionKind ?? DEFAULT_KIND;
@@ -399,15 +412,17 @@ function QueueTab() {
   const [limit, setLimit] = useState(PAGE);
 
   const listRef = useRef<HTMLOListElement | null>(null);
-  const queueRef = useRef(queue);
+  const crateRef = useRef(crate);
   const dragY = useRef<number | null>(null);
   useEffect(() => {
-    queueRef.current = queue;
+    crateRef.current = crate;
   });
 
   let total = 0;
   let unknown = 0;
-  for (const v of queue) {
+  let played = 0;
+  for (const v of crate) {
+    if (v.playedAt > 0) played++;
     const len = lengthOf(v.durationSec, v.plan.cueIn, v.plan.cueOut);
     if (len > 0) total += len;
     else unknown++;
@@ -452,36 +467,37 @@ function QueueTab() {
     const id = dragId;
     reset();
     if (!id) return;
-    const q = queueRef.current;
+    const q = crateRef.current;
     const from = q.findIndex((v) => v.id === id);
     let to = at;
     if (from >= 0 && from < to) to -= 1;
-    if (from >= 0 && to !== from) cmd({ action: 'queue.move', id, index: to });
+    if (from >= 0 && to !== from) cmd({ action: 'crate.move', id, index: to });
   };
 
-  if (queue.length === 0) {
+  if (crate.length === 0) {
     return (
       <div className="sp-empty">
-        <div className="sp-empty-plate">Queue is empty</div>
+        <div className="sp-empty-plate">The crate is empty</div>
         <p>
-          Paste one link — or a whole list of them — into the library bar below and hit <b>+ QUEUE</b>. Drag rows to
+          Paste one link — or a whole list of them — into the library bar below and hit <b>+ CRATE</b>. Drag rows to
           reorder, and click a row to plan how it mixes in.
         </p>
         <p>
-          With <b>AUTO</b> on, the server walks this queue by itself: it fires each track&apos;s planned transition,
-          then loads the next one onto the deck that just freed up. Fill this list and the set runs itself.
+          Tracks stay here after they play, marked <b>played</b> — the crate is a library, not a queue. With{' '}
+          <b>AUTO</b> on, the server walks it by itself: it fires each track&apos;s planned transition, then loads the
+          next unplayed one onto the deck that just freed up.
         </p>
       </div>
     );
   }
 
-  const shown = Math.min(queue.length, limit);
+  const shown = Math.min(crate.length, limit);
 
   return (
     <div className="sp-queue-wrap">
       <div className="sp-qstat">
-        <span className="sp-qstat-n num">{queue.length}</span>
-        <span className="sp-qstat-lbl">{queue.length === 1 ? 'track' : 'tracks'}</span>
+        <span className="sp-qstat-n num">{crate.length}</span>
+        <span className="sp-qstat-lbl">{crate.length === 1 ? 'track' : 'tracks'}</span>
         <span className="sp-qstat-time num" title="Total runtime, honouring each track's cue points">
           {fmtSpan(total)}
         </span>
@@ -490,8 +506,18 @@ function QueueTab() {
             +{unknown} unknown
           </span>
         )}
+        {played > 0 && (
+          <button
+            type="button"
+            className="sp-qstat-played"
+            title="These have been on a deck. Click to mark the whole crate unplayed for another lap."
+            onClick={() => cmd({ action: 'crate.reset' })}
+          >
+            {played} played · reset
+          </button>
+        )}
         {autoDj && (
-          <span className="sp-qstat-auto" title="Auto-advance is walking this queue">
+          <span className="sp-qstat-auto" title="Auto-advance is walking this crate">
             AUTO
           </span>
         )}
@@ -507,12 +533,12 @@ function QueueTab() {
         }}
         onDrop={(e) => {
           e.preventDefault();
-          dropHere(insertAt ?? queueRef.current.length);
+          dropHere(insertAt ?? crateRef.current.length);
         }}
         onDragEnd={reset}
       >
-        {queue.slice(0, shown).map((v, i) => (
-          <QueueRow
+        {crate.slice(0, shown).map((v, i) => (
+          <CrateRow
             key={v.id}
             id={v.id}
             videoId={v.videoId}
@@ -521,12 +547,13 @@ function QueueTab() {
             thumb={v.thumb}
             durationSec={v.durationSec}
             addedBy={v.addedBy}
+            played={v.playedAt > 0}
             planKind={v.plan.kind}
             planMs={v.plan.durationMs}
             planIn={v.plan.cueIn}
             planOut={v.plan.cueOut}
             index={i}
-            count={queue.length}
+            count={crate.length}
             defKind={defKind}
             defMs={defMs}
             expanded={openId === v.id}
@@ -546,10 +573,10 @@ function QueueTab() {
             setInsertAt(shown);
           }}
         />
-        {shown < queue.length && (
+        {shown < crate.length && (
           <li className="sp-more">
             <button type="button" onClick={() => setLimit((n) => n + PAGE)}>
-              Show {Math.min(PAGE, queue.length - shown)} more · {queue.length - shown} hidden
+              Show {Math.min(PAGE, crate.length - shown)} more · {crate.length - shown} hidden
             </button>
             <span className="sp-more-hint">
               Use a row&apos;s Pos field to move a track past the end of this page.
@@ -558,6 +585,69 @@ function QueueTab() {
         )}
       </ol>
     </div>
+  );
+}
+
+/* ----------------------------------------------------------------- requests */
+
+/**
+ * The crowd's list, kept deliberately plain: no planning, no reordering, no drag targets. The only
+ * decisions here are yes and no — a request becomes the DJ's problem only once it is in the crate.
+ */
+function RequestsTab() {
+  const requests = useRequests();
+
+  if (requests.length === 0) {
+    return (
+      <div className="sp-empty">
+        <div className="sp-empty-plate">Nothing requested</div>
+        <p>
+          Anything the room asks for lands here, never in your crate. Take one with <b>+</b> and it joins the end of
+          the crate, unplanned, for you to place and plan like any other track.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ol className="sp-reqs">
+      {requests.map((v) => {
+        const shownTitle = v.title || v.videoId;
+        return (
+          <li className="sp-req" key={v.id}>
+            <span className="sp-thumb">{v.thumb ? <img src={v.thumb} alt="" loading="lazy" /> : null}</span>
+            <span className="sp-req-meta">
+              <span className="sp-row-title">{shownTitle}</span>
+              <span className="sp-row-sub">
+                {v.durationSec > 0 && <span className="num">{fmtTime(v.durationSec)}</span>}
+                <span className="sp-row-who">{v.author || 'unknown'}</span>
+                <span className="sp-row-by">· asked by {v.addedBy || 'someone'}</span>
+              </span>
+            </span>
+            <span className="sp-row-acts">
+              <button
+                type="button"
+                className="sp-req-ok"
+                title={`Move "${shownTitle}" into the crate`}
+                aria-label={`Accept ${shownTitle}`}
+                onClick={() => cmd({ action: 'request.approve', id: v.id })}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="sp-x"
+                title="Turn it down"
+                aria-label={`Reject ${shownTitle}`}
+                onClick={() => cmd({ action: 'request.reject', id: v.id })}
+              >
+                ✕
+              </button>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -688,18 +778,21 @@ function CrowdTab() {
 /* --------------------------------------------------------------------- root */
 
 export function SidePanel() {
-  const [tab, setTab] = useState<Tab>('queue');
-  const queue = useQueue();
+  const [tab, setTab] = useState<Tab>('crate');
+  const room = useRoom();
+  const crateLen = room?.crate.length ?? 0;
+  const requests = useRequests();
   const listeners = useListeners();
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: 'queue', label: 'Queue', count: queue.length },
+    { id: 'crate', label: 'Crate', count: crateLen },
+    { id: 'requests', label: 'Requests', count: requests.length },
     { id: 'chat', label: 'Chat' },
     { id: 'crowd', label: 'Crowd', count: listeners.length },
   ];
 
   return (
-    <aside className="sp" aria-label="Queue, chat and crowd">
+    <aside className="sp" aria-label="Crate, requests, chat and crowd">
       <div className="sp-tabs" role="tablist">
         {tabs.map((t) => (
           <button
@@ -717,7 +810,8 @@ export function SidePanel() {
         ))}
       </div>
       <div className="sp-body" role="tabpanel">
-        {tab === 'queue' && <QueueTab />}
+        {tab === 'crate' && <CrateTab />}
+        {tab === 'requests' && <RequestsTab />}
         {tab === 'chat' && <ChatTab />}
         {tab === 'crowd' && <CrowdTab />}
       </div>

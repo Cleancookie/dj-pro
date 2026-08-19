@@ -15,7 +15,7 @@ information density. It should look like professional equipment, not a website w
    `box-shadow: 0 0 0 1px var(--deck), 0 0 12px var(--deck-glow)` — never by changing layout size.
 5. **Labels are 9-10px, uppercase, `letter-spacing: .09em`, `color: var(--ink-3)`.** Values are
    larger and brighter than their labels. This one rule carries most of the "pro gear" feel.
-6. **No page scroll in the booth.** The DJ view fills the viewport exactly; only the queue, chat
+6. **No page scroll in the booth.** The DJ view fills the viewport exactly; only the crate, requests, chat
    and library lists scroll internally. `min-width: 1240px` for the booth is acceptable.
 7. **Motion is functional and fast** (`--fast`/`--med`): value changes, hover states, engaged
    glows. Nothing bounces, nothing eases in over 200ms. The jog wheel and playhead are the only
@@ -25,7 +25,7 @@ information density. It should look like professional equipment, not a website w
 9. Every interactive control needs a `title` (tooltip) and an accessible label. Keyboard focus
    must be visible: `outline: 1px solid var(--deck, var(--a)); outline-offset: 1px`.
 10. **Empty states are designed**, not blank: an empty deck shows a dashed "DROP A TRACK" plate,
-    an empty queue explains how to add one.
+    an empty crate explains how to add one, and an empty request list says where requests come from.
 
 ## Booth layout (page `/admin`)
 ```
@@ -34,8 +34,8 @@ information density. It should look like professional equipment, not a website w
 ├──────────────────────┬────────────────┬──────────────────────┬───────────────────┤
 │  DeckPanel A         │  MixerColumn   │  DeckPanel B         │  SidePanel        │
 │  (flex 1, min 380px) │  200px fixed   │  (flex 1, min 380px) │  320px fixed      │
-│                      │                │                      │  queue / chat /   │
-├──────────────────────┴────────────────┴──────────────────────┤  listeners tabs   │
+│                      │                │                      │  crate / requests │
+├──────────────────────┴────────────────┴──────────────────────┤  / chat / crowd   │
 │  LibraryBar 148px — paste URL / search, results as cards      │                   │
 └───────────────────────────────────────────────────────────────┴───────────────────┘
 ```

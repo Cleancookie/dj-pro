@@ -16,17 +16,22 @@ const snapshotFile = "room.json"
 // whether the set runs itself, and what the room is called. Deck anchors, listeners and chat are
 // intentionally not persisted - they are meaningless across a restart, and reviving a stale
 // playhead would desync everyone. A planned set, on the other hand, is exactly the thing worth
-// keeping: the Plans ride along inside each queued Video.
+// keeping: the Plans ride along inside each crated Video. The crowd's request list is NOT saved -
+// it is the room's mood at a moment, and reviving last night's shouts helps nobody.
 type Snapshot struct {
 	Version int      `json:"version"`
 	Title   string   `json:"title"`
-	Queue   []*Video `json:"queue"`
+	Crate   []*Video `json:"crate"`
 	AutoDJ  bool     `json:"autoDj"`
 	SavedAt int64    `json:"savedAt"`
+
+	// Queue is the v1 name for Crate, read-only: it lets a snapshot written before the crate
+	// existed still restore a planned set.
+	Queue []*Video `json:"queue,omitempty"`
 }
 
 func snapshotOf(s *RoomState) Snapshot {
-	return Snapshot{Version: 1, Title: s.Title, Queue: s.Queue, AutoDJ: s.AutoDJ.Enabled, SavedAt: nowMs()}
+	return Snapshot{Version: 2, Title: s.Title, Crate: s.Crate, AutoDJ: s.AutoDJ.Enabled, SavedAt: nowMs()}
 }
 
 func (snap *Snapshot) applyTo(s *RoomState) {
@@ -34,16 +39,24 @@ func (snap *Snapshot) applyTo(s *RoomState) {
 		s.Title = t
 	}
 	s.AutoDJ.Enabled = snap.AutoDJ
-	q := make([]*Video, 0, len(snap.Queue))
-	for _, v := range snap.Queue {
-		if len(q) >= maxQueueLen {
+	saved := snap.Crate
+	if len(saved) == 0 {
+		saved = snap.Queue // v1 snapshot
+	}
+	q := make([]*Video, 0, len(saved))
+	for _, v := range saved {
+		if len(q) >= maxCrateLen {
 			break
 		}
 		if clean := sanitizeVideo(v, ""); clean != nil {
+			// A restart is a fresh set: everything is unplayed again, so auto-advance starts at
+			// the top rather than finding a crate it thinks it has already been through.
+			clean.PlayedAt = 0
 			q = append(q, clean)
 		}
 	}
-	s.Queue = q
+	s.Crate = q
+	s.Requests = []*Video{}
 }
 
 // Store writes snapshots to DATA_DIR/room.json. Saves are handed to a writer goroutine so a slow

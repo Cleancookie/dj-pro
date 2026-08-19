@@ -29,12 +29,14 @@ Auto-connects on import, auto-reconnects with backoff, re-sends identity after r
 export function useRoom(): RoomState | null;
 export function useDeck(id: DeckId): Deck | null;
 export function useMixer(): Mixer | null;
-export function useQueue(): Video[];
+export function useCrate(): Video[];                // the DJ's pool; check `playedAt`
+export function useRequests(): Video[];             // what the crowd has asked for
 export function useChat(): ChatMsg[];
 export function useListeners(): Listener[];
 export function useRole(): Role;
 export function useConfig(): ServerConfig;
 export function useStatus(): ConnStatus;
+export function useServerError(): { message: string; at: number } | null;
 export function cmd(c: Cmd): void;                  // re-export of conn.cmd
 
 // Transient reaction bursts for the floating emoji layer (auto-expire after 2.5s)

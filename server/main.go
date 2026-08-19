@@ -253,7 +253,7 @@ func randomBytes(n int) []byte {
 	return b
 }
 
-// newID returns a short random hex id (queue entries, clients, chat messages).
+// newID returns a short random hex id (crate entries, clients, chat messages).
 func newID() string { return hex.EncodeToString(randomBytes(8)) }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -267,6 +267,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func clamp(v, lo, hi float64) float64 {

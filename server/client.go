@@ -19,7 +19,7 @@ const (
 	pongWait   = 60 * time.Second
 	pingPeriod = 25 * time.Second
 
-	// 32KB: a queue.addMany carrying a pasted playlist is the largest legitimate frame, and
+	// 32KB: a crate.addMany carrying a pasted playlist is the largest legitimate frame, and
 	// gorilla drops the socket rather than truncating when a frame exceeds this.
 	readLimit = 32 << 10
 
@@ -65,9 +65,10 @@ type Client struct {
 	send chan []byte
 
 	// hub-goroutine-owned state:
-	name   string
-	role   string
-	wantDJ bool
+	name          string
+	role          string
+	wantDJ        bool
+	lastRequestAt int64 // server ms of this listener's last track request; enforces the cooldown
 
 	// read-pump-owned state:
 	tokens   float64
@@ -177,6 +178,7 @@ type inbound struct {
 	Name       string `json:"name"`
 	Text       string `json:"text"`
 	Kind       string `json:"kind"`
+	Video      *Video `json:"video"`
 }
 
 func (c *Client) dispatch(data []byte) {
@@ -233,6 +235,11 @@ func (c *Client) dispatch(data []byte) {
 			// Reactions are ephemeral: broadcast only, never stored in state.
 			h.broadcast(encode(reactionFrame{T: "reaction", Name: c.name, Kind: kind}))
 		})
+
+	case "request":
+		// The crowd's one write into room state. Everything is checked hub-side in addRequest.
+		v := in.Video
+		c.hub.do(func(h *Hub) { h.addRequest(c, v, nowMs()) })
 
 	case "cmd":
 		raw := make([]byte, len(data))

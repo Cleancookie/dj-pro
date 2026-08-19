@@ -1,12 +1,14 @@
 # DJ Pro
 
 A synced-YouTube DJ booth for the web — an homage to plug.dj, with the deck ergonomics of Serato.
-One DJ runs an unbounded queue across two decks; every listener's browser plays the same thing at
+One DJ runs an unbounded crate across two decks; every listener's browser plays the same thing at
 the same millisecond. Go backend, React frontend, no database.
 
-Two decks are the *mixing surface*, not the set. The set is a queue you can pile as deep as you
+Two decks are the *mixing surface*, not the set. The set is a crate you can pile as deep as you
 like: each item carries its own plan — how it mixes in, at what tempo curve, where it starts and
-ends — and the DJ can arrange track 8's landing while track 3 is still playing. Hand the set to
+ends — and the DJ can arrange track 8's landing while track 3 is still playing. The crate is a
+library rather than a queue: playing a track marks it played and leaves it where it is, so a set
+can be reset and run again. Hand the set to
 auto-advance and the server fires each planned transition on time and keeps the idle deck loaded
 with what is coming next; take it back whenever you want and the fader is yours again.
 
@@ -43,18 +45,21 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 | `DJ_PASSWORD` | `letmein` (with a loud warning) | the booth password |
 | `SESSION_SECRET` | random at boot | HMAC key for the DJ session cookie |
 | `YOUTUBE_API_KEY` | – | optional; enables in-app search. Pasting links always works without it |
-| `DATA_DIR` | `./data` | where the queue/room snapshot is written |
+| `DATA_DIR` | `./data` | where the crate/room snapshot is written |
 
 ## The set
 
-- **Queue as deep as you like.** Paste one link or a whole block of them at once.
-- **Per-track plans.** Each queue item stores its own transition kind, duration and cue in/out.
+- **A crate as deep as you like.** Paste one link or a whole block of them at once.
+- **The crowd gets its own list.** Listeners can ask for tracks; requests land in a separate tab,
+  rate-limited and de-duplicated, and reach the crate only when the DJ takes one. Nothing the room
+  does can reorder the DJ's own thinking.
+- **Per-track plans.** Each crate item stores its own transition kind, duration and cue in/out.
   Unset fields inherit the mixer's current default, so an unplanned item still behaves.
 - **Plan ahead or live.** Arrange any item's landing at any time — while it waits, while the
   previous track plays, or in the moment.
 - **Auto-advance.** Hand the set over and the server fires each planned transition as the live deck
-  reaches its out point, then rotates the queue: the outgoing deck is ejected and the next track is
-  loaded onto it, paused at its cue-in, buffered and anchored on every client before it is audible.
+  reaches its out point, then rotates the decks: the outgoing deck is ejected and the next unplayed
+  crate track is loaded onto it, paused at its cue-in, buffered and anchored on every client before it is audible.
 - **The DJ always wins.** Any manual fader move, load or pause takes effect immediately, and
   auto-advance picks up from whatever it finds.
 

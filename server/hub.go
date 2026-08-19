@@ -11,13 +11,19 @@ import (
 const (
 	// flushInterval caps state fan-out at ~20 frames/sec no matter how fast the DJ moves.
 	flushInterval = 50 * time.Millisecond
-	// persistInterval is how often a dirty queue/title is written to disk.
+	// persistInterval is how often a dirty crate/title is written to disk.
 	persistInterval = 5 * time.Second
 
 	maxChatHistory = 60
-	maxQueueLen    = 500
+	maxCrateLen    = 500
 	sendBuffer     = 32
 	opBuffer       = 512
+
+	// The crowd's request list is deliberately smaller and deliberately fenced: it is a suggestion
+	// box, not a second queue, and it must never become a way to flood the booth.
+	maxRequests          = 60
+	maxRequestsPerClient = 3
+	requestCooldownMs    = 15_000
 )
 
 // hubFn is a mutation submitted to the hub goroutine. The hub goroutine is the ONLY goroutine
@@ -36,13 +42,13 @@ type Hub struct {
 	done chan struct{}
 
 	dirty        bool // state changed, needs a broadcast on the next flush tick
-	persistDirty bool // queue/title/plan/autoDj changed, needs a snapshot
+	persistDirty bool // crate/title/plan/autoDj changed, needs a snapshot
 
 	// Auto-advance bookkeeping, all owned by the hub goroutine.
 	//
 	// autoFiredDeck/autoFiredItem are the idempotence guard: the tick runs 20x/sec, so without
 	// remembering which track we already fired for we would slam the crossfader back and forth.
-	// The queue-entry id is used rather than the YouTube id because the same video may legitimately
+	// The crate-entry id is used rather than the YouTube id because the same video may legitimately
 	// sit on both decks.
 	autoFiredDeck string
 	autoFiredItem string
@@ -73,8 +79,8 @@ func NewHub(cfg *Config, store *Store) *Hub {
 			log.Printf("restore: %v", err)
 		} else if snap != nil {
 			snap.applyTo(h.state)
-			log.Printf("restored %d queue item(s), title %q, autoDj=%v",
-				len(h.state.Queue), h.state.Title, h.state.AutoDJ.Enabled)
+			log.Printf("restored %d crate item(s), title %q, autoDj=%v",
+				len(h.state.Crate), h.state.Title, h.state.AutoDJ.Enabled)
 		}
 	}
 	// A planned set survives a restart, so a room that was running itself picks up where it left off.
@@ -124,7 +130,7 @@ func (h *Hub) Run(ctx context.Context) {
 // touch marks the room as changed; the next flush tick broadcasts it.
 func (h *Hub) touch() { h.dirty = true }
 
-// touchPersist marks the durable part of the room (queue + title) as changed.
+// touchPersist marks the durable part of the room (crate + title) as changed.
 func (h *Hub) touchPersist() {
 	h.dirty = true
 	h.persistDirty = true
