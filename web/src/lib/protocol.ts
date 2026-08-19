@@ -14,6 +14,19 @@ export interface Video {
   thumb: string;
   durationSec: number; // 0 until reported by a player
   addedBy: string;
+  plan: Plan;          // how this track should come IN
+}
+
+/**
+ * A queue item's pre-arranged mix instructions. Zero values mean "inherit the mixer default", so an
+ * unplanned item still behaves sensibly. This is what lets the DJ plan track 8's landing while
+ * track 3 is still playing.
+ */
+export interface Plan {
+  kind: TransitionKind | '';
+  durationMs: number;  // 0 = use mixer.transitionMs
+  cueIn: number;
+  cueOut: number;      // 0 = play to the end
 }
 
 export interface Deck {
@@ -53,6 +66,9 @@ export interface Mixer {
   auto: Automation;
 }
 
+/** Server-driven set progression: fires each item's planned transition and rotates the queue. */
+export interface AutoDJ { enabled: boolean }
+
 export interface Listener { id: string; name: string; role: Role }
 export interface ChatMsg { id: string; name: string; text: string; role: Role; at: number }
 
@@ -60,6 +76,7 @@ export interface RoomState {
   title: string;
   decks: [Deck, Deck];
   mixer: Mixer;
+  autoDj: AutoDJ;
   queue: Video[];
   listeners: Listener[];
   chat: ChatMsg[];
@@ -104,6 +121,9 @@ export type Cmd =
   | { action: 'mixer.transition'; kind: TransitionKind; durationMs: number }
   | { action: 'mixer.fire'; to: DeckId }
   | { action: 'queue.add'; video: Video }
+  | { action: 'queue.addMany'; videos: Video[] }
+  | { action: 'queue.plan'; id: string; plan: Partial<Plan> }
+  | { action: 'autodj.set'; enabled: boolean }
   | { action: 'queue.remove'; id: string }
   | { action: 'queue.move'; id: string; index: number }
   | { action: 'queue.load'; id: string; deck: DeckId }

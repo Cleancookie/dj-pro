@@ -11,6 +11,18 @@ type Video struct {
 	Thumb       string  `json:"thumb"`
 	DurationSec float64 `json:"durationSec"` // 0 until a client reports it
 	AddedBy     string  `json:"addedBy"`
+	Plan        Plan    `json:"plan"` // how this track should come IN
+}
+
+// Plan is a queue item's pre-arranged mix instructions: how this track should be brought in and
+// where it should start and end. The DJ can set these up long before the track plays, which is the
+// point of a queue - you sort out track 8's landing while track 3 is still going.
+// Zero values mean "inherit the mixer default", so an unplanned item still behaves sensibly.
+type Plan struct {
+	Kind       string  `json:"kind"`       // "" = use Mixer.TransitionKind
+	DurationMs int64   `json:"durationMs"` // 0 = use Mixer.TransitionMs
+	CueIn      float64 `json:"cueIn"`      // where this track starts
+	CueOut     float64 `json:"cueOut"`     // 0 = play to the end
 }
 
 // Deck is one player channel. Position is never stored directly: it is derived from
@@ -68,10 +80,18 @@ type ChatMsg struct {
 	At   int64  `json:"at"`
 }
 
+// AutoDJ drives the set forward without the DJ touching anything: when the live deck approaches
+// its out point, the server fires the incoming track's planned transition and rotates the queue.
+// The DJ can always override - any manual crossfade, load or pause wins.
+type AutoDJ struct {
+	Enabled bool `json:"enabled"`
+}
+
 type RoomState struct {
 	Title     string     `json:"title"`
 	Decks     [2]*Deck   `json:"decks"` // index 0 = "a", 1 = "b"
 	Mixer     Mixer      `json:"mixer"`
+	AutoDJ    AutoDJ     `json:"autoDj"`
 	Queue     []*Video   `json:"queue"`
 	Listeners []Listener `json:"listeners"`
 	Chat      []ChatMsg  `json:"chat"` // last 60

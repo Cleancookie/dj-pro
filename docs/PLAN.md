@@ -26,6 +26,10 @@ on its first frame.
 - **Cue channel**: the DJ monitors either deck in their headphones *while the audience hears only
   the main mix*. A cue-mix knob blends cue against master, exactly like a real mixer. All of it is
   local to the DJ's browser.
+- **The queue is the set**: unbounded, with a per-item `Plan` (transition kind, duration, cue in and
+  cue out) that the DJ can arrange ahead of time or live. Auto-advance hands progression to the
+  server, which fires each planned transition on time and keeps the idle deck prepped with the next
+  track — an infinite set that runs itself until the DJ takes the fader back.
 - **Library**: paste any YouTube link (resolved server-side via oEmbed, no API key needed) or search
   when a `YOUTUBE_API_KEY` is present. Queue with drag-to-reorder and load-to-deck.
 - **Keyboard shortcuts** for everything a DJ touches mid-mix.

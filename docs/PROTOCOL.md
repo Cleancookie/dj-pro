@@ -66,6 +66,9 @@ mixer.master     { value }                    // 0..1
 mixer.transition { kind:"cut"|"crossfade"|"fadeThrough"|"bassSwap", durationMs }
 mixer.fire       { to:"a"|"b" }               // run the configured transition toward a deck
 queue.add        { video }
+queue.addMany    { videos }                   // bulk-add, order preserved
+queue.plan       { id, plan: {kind?,durationMs?,cueIn?,cueOut?} }  // pre-arrange how an item mixes IN
+autodj.set       { enabled }                  // hand the set over to the server, or take it back
 queue.remove     { id }
 queue.move       { id, index }
 queue.load       { id, deck }                 // pop from queue into a deck
@@ -83,5 +86,25 @@ GET  /api/search?q=...      -> Video[] (only if YOUTUBE_API_KEY set; else 501)
 GET  /ws                    -> websocket
 GET  /*                     -> embedded SPA
 ```
+## Auto-advance (the infinite set)
+
+`autodj.set {enabled:true}` hands set progression to the server, which evaluates this on its 50ms
+flush tick. Nothing new is streamed — it simply issues the same mutations the DJ would.
+
+1. **Trigger.** For the live deck, `out = cueOut > 0 ? cueOut : durationSec`. Let `dur` be the
+   *incoming* item's `plan.durationMs` (falling back to `mixer.transitionMs`). When the live deck's
+   derived position reaches `out - dur/1000`, and no automation is already running, the transition
+   fires toward the prepped deck using the incoming item's `plan.kind` (falling back to
+   `mixer.transitionKind`).
+2. **Rotate.** Once the automation completes, the outgoing deck is paused and ejected, the next
+   queue item is loaded onto it paused at its `plan.cueIn`, and its `cueOut` is applied. So there is
+   always exactly one live deck and one prepped deck, and every client has the next track buffered
+   and anchored before it is ever audible.
+3. **Cold start.** If auto-advance is enabled with nothing playing, the first queue item is loaded,
+   started at its `cueIn`, and the crossfader is moved to that deck.
+4. **The DJ always wins.** Any manual `mixer.crossfade`, `deck.load`, `deck.pause` or `queue.load`
+   takes effect immediately; a manual crossfade also cancels the running automation as it always
+   has. Auto-advance picks up from whatever state it finds on the next tick.
+
 A socket is DJ if it presents a valid `dj_session` cookie OR sends `auth` with the right password.
 Exactly one DJ seat: a new DJ login takes over and the old DJ socket is demoted to audience.
