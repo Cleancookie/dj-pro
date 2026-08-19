@@ -412,6 +412,22 @@
   border-color: var(--deck);
   box-shadow: var(--bevel), 0 0 10px -3px var(--deck);
 }
+.sp-cue {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast), box-shadow var(--fast);
+}
+.sp-cue:hover {
+  color: var(--cue);
+  border-color: var(--cue);
+  box-shadow: 0 0 10px -3px var(--cue);
+}
 .sp-replay {
   width: 20px;
   height: 22px;
@@ -443,6 +459,7 @@
   border-color: var(--hot);
 }
 .sp-load:focus-visible,
+.sp-cue:focus-visible,
 .sp-replay:focus-visible,
 .sp-req-ok:focus-visible,
 .sp-x:focus-visible,

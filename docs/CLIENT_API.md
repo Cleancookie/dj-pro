@@ -76,7 +76,8 @@ export class TapTempo { tap(): number | null; reset(): void; get count(): number
 ```
 
 ## `lib/engine.ts`
-Owns the two YouTube iframes, the drift-correction loop and all volume routing.
+Owns the two YouTube iframes, the DJ's third (preview) iframe, the drift-correction loop and all
+volume routing.
 ```ts
 export function useEngine(): void;                       // call ONCE in the page root
 export function useDeckMount(id: DeckId): (el: HTMLDivElement | null) => void;
@@ -84,7 +85,16 @@ export function usePlayhead(id: DeckId): number;         // rAF-driven seconds, 
 export function useDeckHealth(id: DeckId): { ready: boolean; buffering: boolean; driftMs: number };
 export function useAudioGate(): { unlocked: boolean; unlock(): void };
 export function setScrub(id: DeckId, active: boolean): void; // suppress drift correction while dragging
+
+// Preview: DJ-local audition, never in room state, never audible to the audience.
+export function previewPlay(v: { videoId: string; title?: string }, startSec?: number): void;
+export function previewToggle(): void;
+export function previewStop(): void;
+export function usePreview(): { videoId: string | null; title: string; playing: boolean };
+export function usePreviewMount(): (el: HTMLDivElement | null) => void;  // mount it exactly once
 ```
+The preview player's gain is `cueVol * cueMix` — the cue bus and nothing else — so it is silent
+with CUE MIX hard over on MASTER, exactly like a monitored deck.
 `useEngine` reads `useRole()`: role `dj` applies monitor/cue routing, role `audience` applies the
 pure main mix. Audience clients keep BOTH decks loaded and playing so an incoming track is already
 in sync when the crossfader moves.

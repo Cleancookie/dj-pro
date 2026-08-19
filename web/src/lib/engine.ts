@@ -1,4 +1,5 @@
-// The playback engine: one YouTube iframe per deck, drift correction, volume routing.
+// The playback engine: one YouTube iframe per deck (plus the DJ's preview player), drift
+// correction, volume routing.
 //
 // Everything here is a module-level singleton driven by two timers:
 //   * a 250ms CONTROL tick   — load/cue, play/pause, rate, drift correction, metadata
@@ -117,6 +118,206 @@ export function setScrub(id: DeckId, active: boolean): void {
   if (!active) rt.cooldownUntil = Date.now() + SEEK_COOLDOWN_MS;
 }
 
+// --- preview player -------------------------------------------------------
+//
+// A third player, DJ-local and entirely absent from room state: nothing here is
+// broadcast, and the audience never hears it. It feeds only the cue side of the
+// headphone blend, which is what makes auditioning a track over a live set
+// possible on the one audio output a browser gives us. Turn the CUE MIX knob
+// towards MASTER and the preview fades out of your headphones, exactly as a
+// deck's cue does.
+
+interface PreviewRuntime {
+  mount: HTMLDivElement | null;
+  host: HTMLDivElement | null;
+  player: YT.Player | null;
+  ready: boolean;
+  creating: boolean;
+  lastVolume: number;
+  muted: boolean;
+  /** What the player currently holds, so a re-preview of the same track resumes. */
+  loadedVideoId: string | null;
+}
+
+const preview: PreviewRuntime = {
+  mount: null,
+  host: null,
+  player: null,
+  ready: false,
+  creating: false,
+  lastVolume: -1,
+  muted: true,
+  loadedVideoId: null,
+};
+
+/** What the UI needs to render. Kept separate from the runtime so React never reads a live iframe. */
+export interface PreviewState {
+  videoId: string | null;
+  title: string;
+  playing: boolean;
+}
+
+let previewState: PreviewState = { videoId: null, title: '', playing: false };
+const previewSubs = new Set<() => void>();
+
+function setPreviewState(next: Partial<PreviewState>): void {
+  const merged = { ...previewState, ...next };
+  if (
+    merged.videoId === previewState.videoId &&
+    merged.title === previewState.title &&
+    merged.playing === previewState.playing
+  ) {
+    return;
+  }
+  previewState = merged;
+  for (const fn of previewSubs) fn();
+}
+
+function createPreviewPlayer(mount: HTMLDivElement, videoId: string): void {
+  if (preview.player || preview.mount !== mount) return;
+  const host = document.createElement('div');
+  host.style.width = '100%';
+  host.style.height = '100%';
+  mount.appendChild(host);
+  preview.host = host;
+
+  try {
+    preview.player = new window.YT!.Player(host, {
+      width: '100%',
+      height: '100%',
+      videoId,
+      playerVars: {
+        controls: 0,
+        disablekb: 1,
+        modestbranding: 1,
+        rel: 0,
+        iv_load_policy: 3,
+        playsinline: 1,
+        fs: 0,
+        origin: location.origin,
+      },
+      events: {
+        onReady: () => {
+          preview.ready = true;
+          preview.loadedVideoId = videoId;
+          preview.lastVolume = -1;
+          try {
+            if (gateUnlocked) {
+              preview.player?.unMute();
+              preview.muted = false;
+            }
+            preview.player?.playVideo();
+          } catch {
+            /* ignore */
+          }
+          volumeTick();
+        },
+        onStateChange: (e) => {
+          // The preview has no server truth to reconcile against, so its own player
+          // state IS the truth: mirror it so the transport button never lies.
+          if (e.data === ST_PLAYING) setPreviewState({ playing: true });
+          else if (e.data === ST_PAUSED || e.data === ST_ENDED) setPreviewState({ playing: false });
+        },
+        onError: (e) => {
+          console.warn('[engine] preview player error', e.data);
+          setPreviewState({ playing: false });
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[engine] could not create the preview player', err);
+    preview.player = null;
+  }
+}
+
+function ensurePreviewPlayer(videoId: string): void {
+  const mount = preview.mount;
+  if (!mount || preview.player || preview.creating) return;
+  preview.creating = true;
+  void loadApi().then(() => {
+    preview.creating = false;
+    if (preview.mount !== mount || preview.player) return;
+    createPreviewPlayer(mount, videoId);
+  });
+}
+
+/** Audition a track in the headphones. Re-previewing what is already loaded just resumes it. */
+export function previewPlay(video: { videoId: string; title?: string }, startSec = 0): void {
+  if (!video?.videoId) return;
+  setPreviewState({ videoId: video.videoId, title: video.title ?? '', playing: true });
+  if (!preview.player || !preview.ready) {
+    ensurePreviewPlayer(video.videoId);
+    return;
+  }
+  try {
+    if (preview.loadedVideoId === video.videoId && startSec <= 0) {
+      preview.player.playVideo();
+    } else {
+      preview.player.loadVideoById({ videoId: video.videoId, startSeconds: Math.max(0, startSec) });
+      preview.loadedVideoId = video.videoId;
+    }
+  } catch {
+    /* the player will catch up on its next ready */
+  }
+}
+
+export function previewToggle(): void {
+  const p = preview.player;
+  if (!p || !preview.ready) return;
+  try {
+    if (previewState.playing) p.pauseVideo();
+    else p.playVideo();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Stop and forget. The iframe stays put — building it again costs a second of buffering. */
+export function previewStop(): void {
+  setPreviewState({ videoId: null, title: '', playing: false });
+  try {
+    preview.player?.pauseVideo();
+  } catch {
+    /* ignore */
+  }
+}
+
+export function usePreview(): PreviewState {
+  return useSyncExternalStore(
+    (fn) => {
+      previewSubs.add(fn);
+      return () => previewSubs.delete(fn);
+    },
+    () => previewState,
+    () => previewState,
+  );
+}
+
+/** Mount point for the preview iframe: `<div ref={usePreviewMount()} />`. */
+export function usePreviewMount(): (el: HTMLDivElement | null) => void {
+  return useCallback((el: HTMLDivElement | null) => {
+    if (el) {
+      if (preview.mount === el) return;
+      preview.mount = el;
+      if (previewState.videoId) ensurePreviewPlayer(previewState.videoId);
+      return;
+    }
+    // Unmounted (leaving the booth): tear the iframe down, it has no audience to serve.
+    try {
+      preview.player?.destroy();
+    } catch {
+      /* already gone */
+    }
+    preview.mount = null;
+    preview.host = null;
+    preview.player = null;
+    preview.ready = false;
+    preview.loadedVideoId = null;
+    preview.lastVolume = -1;
+    setPreviewState({ videoId: null, title: '', playing: false });
+  }, []);
+}
+
 // --- audio gate -----------------------------------------------------------
 
 const GATE_KEY = 'djpro.audio';
@@ -154,6 +355,14 @@ function unlockAudio(): void {
       if (deck?.playing) rt.player.playVideo();
     } catch {
       /* player not ready yet; the control tick will catch up */
+    }
+  }
+  if (preview.player && preview.ready) {
+    try {
+      preview.player.unMute();
+      preview.muted = false;
+    } catch {
+      /* ignore */
     }
   }
 }
@@ -471,6 +680,8 @@ function controlTick(): void {
 // --- volume loop ----------------------------------------------------------
 
 function volumeTick(): void {
+  previewVolumeTick();
+
   const st = getState();
   const room = st.room;
   if (!room) return;
@@ -531,6 +742,49 @@ function volumeTick(): void {
       } catch {
         /* ignore */
       }
+    }
+  }
+}
+
+/**
+ * The preview's own gain. It lives on the cue side only: `cueVol * cueMix`, the same blend a
+ * monitored deck gets, so turning CUE MIX to MASTER silences it exactly as it does a deck's cue.
+ * Deliberately never mixed into the master path — the audience must never hear an audition.
+ */
+function previewVolumeTick(): void {
+  const player = preview.player;
+  if (!player || !preview.ready) return;
+  const st = getState();
+
+  if (!gateUnlocked) {
+    if (!preview.muted) {
+      try {
+        player.mute();
+      } catch {
+        /* ignore */
+      }
+      preview.muted = true;
+    }
+    return;
+  }
+  if (preview.muted) {
+    try {
+      player.unMute();
+    } catch {
+      /* ignore */
+    }
+    preview.muted = false;
+  }
+
+  const prefs = st.monitor;
+  const out = st.role === 'dj' ? clamp01(prefs.cueVol) * clamp01(prefs.cueMix) : 0;
+  const yt = out <= 0 ? 0 : Math.round(clamp01(out) * 100);
+  if (yt !== preview.lastVolume) {
+    try {
+      player.setVolume(yt);
+      preview.lastVolume = yt;
+    } catch {
+      /* ignore */
     }
   }
 }

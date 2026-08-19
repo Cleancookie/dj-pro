@@ -82,6 +82,11 @@ The DJ hears either deck in their headphones while the audience hears only the m
 deck routes it to the monitor, and the CUE MIX knob blends monitor against master. All of that is
 local to the DJ's browser — the audience is never affected.
 
+**Previewing** rides the same bus. A third player — DJ-local, absent from room state — auditions any
+track in the crate, the request list or the library without touching a deck: hit `♪` on a row and it
+appears in the preview strip under the side panel. Its gain is the cue bus and nothing else, so with
+CUE MIX hard over on MASTER you will not hear it. That is the point, and the strip says so.
+
 ## How the sync works
 
 The server keeps one authoritative `RoomState` and re-stamps a per-deck time anchor

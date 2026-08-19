@@ -3,7 +3,9 @@ import type { DeckId, Listener, Plan, TransitionKind, Video } from '../../lib/pr
 import { cmd, useChat, useListeners, useRequests, useRoom } from '../../lib/store';
 import { conn } from '../../lib/ws';
 import { fmtTime, fmtTimeMs } from '../../lib/deckmath';
+import { previewPlay } from '../../lib/engine';
 import { DEFAULT_KIND, DEFAULT_MS, KIND_LABEL } from './MixerColumn';
+import { PreviewBar } from './PreviewBar';
 import { Fader } from './Fader';
 import './SidePanel.css';
 
@@ -339,6 +341,15 @@ const CrateRow = memo(function CrateRow(p: RowProps) {
           >
             ▾
           </button>
+          <button
+            type="button"
+            className="sp-cue"
+            title={`Preview "${shownTitle}" in your headphones from its cue-in`}
+            aria-label={`Preview ${shownTitle}`}
+            onClick={() => previewPlay({ videoId: p.videoId, title: shownTitle }, p.planIn)}
+          >
+            ♪
+          </button>
           {(['a', 'b'] as DeckId[]).map((d) => (
             <button
               key={d}
@@ -627,6 +638,15 @@ function RequestsTab() {
             <span className="sp-row-acts">
               <button
                 type="button"
+                className="sp-cue"
+                title={`Preview "${shownTitle}" in your headphones`}
+                aria-label={`Preview ${shownTitle}`}
+                onClick={() => previewPlay({ videoId: v.videoId, title: shownTitle })}
+              >
+                ♪
+              </button>
+              <button
+                type="button"
                 className="sp-req-ok"
                 title={`Move "${shownTitle}" into the crate`}
                 aria-label={`Accept ${shownTitle}`}
@@ -815,6 +835,7 @@ export function SidePanel() {
         {tab === 'chat' && <ChatTab />}
         {tab === 'crowd' && <CrowdTab />}
       </div>
+      <PreviewBar />
     </aside>
   );
 }

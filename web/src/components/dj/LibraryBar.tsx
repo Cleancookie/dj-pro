@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DeckId, Video } from '../../lib/protocol';
 import { cmd, useConfig } from '../../lib/store';
+import { previewPlay } from '../../lib/engine';
 import './LibraryBar.css';
 
 /** How many /api/resolve requests may be in flight at once during a bulk add. */
@@ -360,6 +361,14 @@ export function LibraryBar() {
                   </span>
                 </div>
                 <div className="lib-acts">
+                  <button
+                    type="button"
+                    className="lib-act is-cue"
+                    title={`Preview "${v.title}" in your headphones`}
+                    onClick={() => previewPlay(v)}
+                  >
+                    ♪ Cue
+                  </button>
                   {(['a', 'b'] as DeckId[]).map((d) => (
                     <button
                       key={d}

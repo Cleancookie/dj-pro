@@ -1,0 +1,77 @@
+.pv {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.pv.is-silent {
+  background: var(--panel);
+}
+.pv-screen {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 36px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--sunk);
+  /* Audition only: the picture is a confidence check, never a control surface. */
+  pointer-events: none;
+}
+.pv-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.pv-lbl {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--cue);
+}
+.pv-title {
+  font-size: 11px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pv-warn {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--warn);
+  cursor: help;
+}
+.pv-btn,
+.pv-x {
+  flex: 0 0 auto;
+  height: 24px;
+  min-width: 24px;
+  font-size: 10px;
+  color: var(--ink-2);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast);
+}
+.pv-btn:hover {
+  color: var(--cue);
+  border-color: var(--cue);
+}
+.pv-x:hover {
+  color: var(--hot);
+  border-color: var(--hot);
+}
+.pv-btn:focus-visible,
+.pv-x:focus-visible {
+  outline: 1px solid var(--cue);
+  outline-offset: 1px;
+}

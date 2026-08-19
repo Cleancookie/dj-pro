@@ -384,3 +384,13 @@
   padding: 0 6px;
   letter-spacing: 0.04em;
 }
+
+/* Audition button: the cue bus is purple everywhere else in the booth, so it is here too. */
+.lib-act.is-cue {
+  color: var(--cue);
+  border-color: var(--line-2);
+}
+.lib-act.is-cue:hover {
+  border-color: var(--cue);
+  box-shadow: 0 0 10px -3px var(--cue);
+}
