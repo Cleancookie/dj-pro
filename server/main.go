@@ -24,8 +24,9 @@ import (
 	"time"
 )
 
-// web-dist is populated by the Docker build (web/dist -> server/web-dist). A placeholder
-// index.html is committed so `go build` works without running the frontend build first.
+// web-dist is populated by `make build` / the Docker build (web/dist -> server/web-dist). Only a
+// .gitkeep is committed - enough for `go build` to succeed without running the frontend build first
+// (the `all:` prefix embeds dotfiles), in which case the SPA routes answer "SPA bundle not built".
 //
 //go:embed all:web-dist
 var distFS embed.FS

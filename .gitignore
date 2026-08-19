@@ -1,9 +1,11 @@
 node_modules/
 dist/
-data/*.json
 .env
 server/dj-pro
 server/server
-server/web-dist/*
-!server/web-dist/index.html
 *.log
+# runtime state (queue/room snapshot), at any depth
+**/data/
+# built SPA copied in by `make build`; only the embed placeholder is tracked
+server/web-dist/*
+!server/web-dist/.gitkeep

@@ -13,6 +13,7 @@ dev-web:
 build: ## production build: web -> server/web-dist -> single static binary
 	cd web && npm run build
 	rm -rf server/web-dist && cp -r web/dist server/web-dist
+	touch server/web-dist/.gitkeep   # keeps the embed placeholder tracked
 	cd server && CGO_ENABLED=0 go build -o dj-pro .
 	@echo "built ./server/dj-pro"
 
