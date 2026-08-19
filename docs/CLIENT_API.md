@@ -41,7 +41,9 @@ export function cmd(c: Cmd): void;                  // re-export of conn.cmd
 export interface Burst { id: number; kind: ReactionKind; name: string; x: number }
 export function useBursts(): Burst[];
 
-// DJ-only local audio routing (never leaves this browser, persisted to localStorage)
+// Local audio routing — never leaves this browser, persisted to localStorage.
+// masterVol applies to BOTH roles (audience: their output level, the only audio control they get;
+// DJ: the master-monitor level inside the headphone blend). cueVol/cueMix are DJ-only.
 export interface MonitorPrefs { cueVol: number; masterVol: number; cueMix: number }
 export function useMonitor(): [MonitorPrefs, (p: Partial<MonitorPrefs>) => void];
 ```

@@ -1,0 +1,351 @@
+.deck {
+  height: 100%;
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel) 42%, var(--panel));
+  box-shadow: var(--sh-2), var(--bevel);
+  overflow: hidden;
+}
+
+/* the deck's accent lives as a hairline along the top edge */
+.deck::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--deck), transparent);
+  opacity: 0.45;
+}
+
+.deck { position: relative; }
+
+/* ---------------------------------------------------------------- header */
+
+.dk-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-height: 26px;
+}
+
+.dk-badge {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  background: var(--deck);
+  color: var(--bg);
+  font: 700 12px/1 var(--ui);
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 10px var(--deck-glow);
+  flex: 0 0 auto;
+}
+
+.dk-meta {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dk-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+}
+
+.dk-author {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+}
+
+.dk-tags {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.dk-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border-radius: 99px;
+  border: 1px solid var(--line-2);
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.dk-tag.is-load { color: var(--ink-2); }
+.dk-tag.is-drift { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.dk-tag.is-quiet { color: var(--ink-3); }
+.dk-tag.is-mix { color: var(--ink-2); }
+.dk-tag.is-air {
+  color: var(--live);
+  border-color: var(--live);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--live) 30%, transparent);
+}
+
+.dk-spin {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  border-top-color: var(--ink-2);
+  animation: dk-spin 700ms linear infinite;
+}
+
+@keyframes dk-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dk-eject {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  box-shadow: var(--bevel);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast);
+}
+
+.dk-eject svg { width: 12px; height: 12px; }
+.dk-eject:hover:not(:disabled) { color: var(--hot); border-color: var(--hot); }
+.dk-eject:disabled { opacity: 0.35; cursor: not-allowed; }
+.dk-eject:focus-visible { outline: 1px solid var(--deck, var(--a)); outline-offset: 1px; }
+
+/* ---------------------------------------------------------------- screen */
+
+.dk-screen {
+  /* the 16:9 frame sets the height; spare panel height goes to the waveform instead */
+  flex: 0 1 auto;
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.dk-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-height: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: var(--r);
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, var(--panel-3), var(--sunk) 75%);
+  box-shadow: var(--sh-in), 0 0 0 1px var(--line);
+  transition: filter var(--med);
+}
+
+.dk-screen.is-silent .dk-frame { filter: brightness(0.55) saturate(0.7); }
+.dk-screen.is-empty .dk-frame { filter: none; }
+
+.dk-mount,
+.dk-mount iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* the DJ must never reach YouTube's own controls */
+.dk-mount { pointer-events: none; }
+.dk-mount iframe { pointer-events: none; }
+
+.dk-drop {
+  position: absolute;
+  inset: 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r);
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.012) 0 8px,
+    transparent 8px 16px
+  );
+}
+
+.dk-drop-txt {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+
+.dk-drop-sub {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-4);
+}
+
+.dk-air {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  gap: 4px;
+}
+
+.dk-tc {
+  position: absolute;
+  bottom: 5px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: var(--r-sm);
+  pointer-events: none;
+}
+
+.dk-tc-l { left: 6px; }
+.dk-tc-r { right: 6px; color: var(--ink-2); }
+
+/* ---------------------------------------------------- jog + right stack */
+
+.dk-mid {
+  /* platter | BPM+TAP/SYNC | pitch fader — the same left-to-right order as real gear */
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.dk-stack {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.dk-bpm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 4px 7px 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: linear-gradient(180deg, var(--sunk), var(--panel));
+  box-shadow: var(--sh-in);
+}
+
+.dk-bpm-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+
+.dk-bpm-val {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 26px;
+  line-height: 1.05;
+  color: var(--ink);
+  cursor: text;
+  text-align: left;
+}
+
+.dk-bpm-val.is-unset { color: var(--ink-4); }
+.dk-bpm-val:hover { color: var(--deck); }
+.dk-bpm-val:focus-visible { outline: 1px solid var(--deck, var(--a)); outline-offset: 1px; }
+
+.dk-bpm-in {
+  width: 82px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--deck);
+  background: none;
+  color: var(--ink);
+  font-size: 26px;
+  line-height: 1.05;
+  outline: none;
+}
+
+.dk-bpm-eff {
+  font-size: 10px;
+  color: var(--deck);
+  opacity: 0.85;
+  cursor: help;
+}
+
+.dk-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.dk-btn {
+  position: relative;
+  min-height: 24px;
+  padding: 3px 4px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  box-shadow: var(--bevel);
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast), box-shadow var(--fast);
+}
+
+.dk-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-4); }
+.dk-btn:active:not(:disabled) { box-shadow: var(--sh-in); }
+.dk-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+.dk-btn:focus-visible { outline: 1px solid var(--deck, var(--a)); outline-offset: 1px; }
+
+.dk-btn.is-on {
+  color: var(--deck);
+  border-color: var(--deck);
+  box-shadow: 0 0 0 1px var(--deck), 0 0 12px var(--deck-glow);
+}
+
+.dk-btn-sub {
+  position: absolute;
+  right: 4px;
+  top: 2px;
+  font-size: 8px;
+  color: var(--deck);
+}

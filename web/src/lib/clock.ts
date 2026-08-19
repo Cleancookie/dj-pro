@@ -22,11 +22,17 @@ interface Sample {
   offset: number;
 }
 
-const WINDOW_MS = 60_000; // samples older than this are discarded
+const WINDOW_MS = 30_000; // samples older than this are discarded
 const MAX_SAMPLES = 16;
 const SLEW_FRACTION = 0.02; // correct at most 2% of elapsed real time (~20ms/s)
 const MIN_SLEW_STEP = 0.5; // ...but always at least this much per call, in ms
-const SNAP_THRESHOLD = 2_000; // a bigger error than this means "we were asleep"
+/** Slew errors smaller than this (the normal case: a few ms of jitter); snap
+ *  anything bigger, because a quarter second of phase error is audible and
+ *  slewing it out at 20ms/s would take far too long. */
+const SNAP_THRESHOLD = 150;
+/** Two consecutive samples this far from the current estimate mean the *clock*
+ *  changed (sleep/resume, server restart), not that a packet was delayed. */
+const DISAGREE_MS = 1_000;
 
 const samples: Sample[] = [];
 
@@ -35,6 +41,7 @@ let targetOffset = 0;
 let lastSlewAt = 0;
 let gotPong = false;
 let bestRtt = 0;
+let disagreeCount = 0;
 
 /** Cheap: one Date.now(), a couple of compares. Safe to call every frame. */
 function nowInternal(): number {
@@ -100,7 +107,21 @@ export function clockOnPong(clientTime: number, serverTime: number): void {
   const recv = Date.now();
   const rtt = recv - clientTime;
   if (rtt < 0 || rtt > 10_000) return; // nonsense sample, drop it
-  samples.push({ at: recv, rtt, offset: serverTime + rtt / 2 - recv });
+  const offset = serverTime + rtt / 2 - recv;
+
+  // Regime change detection. One wildly different sample is a delayed packet and
+  // min-RTT filtering will ignore it; two in a row mean the old window describes
+  // a clock relationship that no longer exists, so throw it away.
+  if (gotPong && Math.abs(offset - targetOffset) > DISAGREE_MS) {
+    if (++disagreeCount >= 2) {
+      samples.length = 0;
+      disagreeCount = 0;
+    }
+  } else {
+    disagreeCount = 0;
+  }
+
+  samples.push({ at: recv, rtt, offset });
   recompute();
 }
 
@@ -140,6 +161,10 @@ function ping(): void {
 /** On every socket open: 5 rapid pings to converge fast, then one every 10s. */
 export function startClockSync(): void {
   stopClockSync();
+  // A reconnect is the most likely moment for the clock relationship to have
+  // shifted (laptop sleep, server restart), so re-measure from scratch.
+  samples.length = 0;
+  disagreeCount = 0;
   let sent = 0;
   ping();
   sent++;

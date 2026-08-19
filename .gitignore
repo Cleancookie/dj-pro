@@ -3,5 +3,7 @@ dist/
 data/*.json
 .env
 server/dj-pro
-server/web-dist/
+server/server
+server/web-dist/*
+!server/web-dist/index.html
 *.log

@@ -50,3 +50,9 @@ on its first frame.
   the track's actual amplitude.
 - **No database.** State lives in memory; the queue and room title snapshot to a JSON file so a
   restart is not a wipe.
+- **YouTube's own player chrome stays visible.** The video title, the "Watch on YouTube" link, the
+  share button and the play/pause overlay belong to YouTube's embedded player, and their terms
+  require that branding not be obscured. So the decks and the stage frame the player rather than
+  covering it — our own title bar, timecode and waveform sit outside the video, not on top of its
+  logo. A deck with nothing loaded creates no player at all, so an idle booth shows our empty state
+  rather than a stray red play button.

@@ -9,7 +9,7 @@ export interface FaderProps {
   max: number;
   onChange: (v: number) => void;
   orientation: FaderOrientation;
-  /** Double-click snaps here; the fill also grows out from here. */
+  /** Double-click snaps here; the fill also grows outwards from here. */
   detent?: number;
   label: string;
   format?: (v: number) => string;
@@ -18,15 +18,16 @@ export interface FaderProps {
   disabled?: boolean;
 }
 
-/** Cap length along the travel axis; must match Fader.css. */
-const CAP_V = 22;
-const CAP_H = 20;
+/** Half the cap length along the travel axis. Must match `--cap-*` in Fader.css. */
+const HALF_V = 11;
+const HALF_H = 10;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
 /**
- * Rate-limits a callback to `ms` between calls while still delivering the last
- * value, plus a `flush` that fires immediately (used on pointer release).
+ * Rate-limits a callback to one call per `ms` while still delivering the most
+ * recent value, plus a `flush` that fires immediately (used on pointer release
+ * so the server always receives the final position).
  */
 export function useRateLimited<T>(fn: (v: T) => void, ms = 33) {
   const fnRef = useRef(fn);
@@ -37,13 +38,13 @@ export function useRateLimited<T>(fn: (v: T) => void, ms = 33) {
   const timer = useRef<number | null>(null);
   const pending = useRef<{ v: T } | null>(null);
 
-  const clear = () => {
+  const clear = useCallback(() => {
     if (timer.current !== null) {
       clearTimeout(timer.current);
       timer.current = null;
     }
-  };
-  useEffect(() => clear, []);
+  }, []);
+  useEffect(() => clear, [clear]);
 
   const send = useCallback(
     (v: T) => {
@@ -67,22 +68,28 @@ export function useRateLimited<T>(fn: (v: T) => void, ms = 33) {
         }, wait);
       }
     },
-    [ms],
+    [clear, ms],
   );
 
-  const flush = useCallback((v: T) => {
-    clear();
-    pending.current = null;
-    last.current = performance.now();
-    fnRef.current(v);
-  }, []);
+  const flush = useCallback(
+    (v: T) => {
+      clear();
+      pending.current = null;
+      last.current = performance.now();
+      fnRef.current(v);
+    },
+    [clear],
+  );
 
   return [send, flush] as const;
 }
 
 /**
- * The house fader: recessed track, raised cap, pointer-capture drag, full
- * keyboard support, wheel, and a double-click detent snap.
+ * The house fader: recessed rail, raised cap, pointer-capture drag, full
+ * keyboard support, wheel, and a double-click snap to `detent`.
+ *
+ * Grabbing the cap drags relatively (the cap never jumps under your finger);
+ * pressing anywhere else on the track jumps straight to that position.
  */
 export function Fader({
   value,
@@ -102,28 +109,34 @@ export function Fader({
   const [send, flush] = useRateLimited<number>(onChange, 33);
 
   const span = max - min || 1;
+  const vertical = orientation === 'vertical';
+  const half = vertical ? HALF_V : HALF_H;
   const shown = drag ?? clamp(value, min, max);
   const fmt = format ?? ((v: number) => v.toFixed(2));
-  const vertical = orientation === 'vertical';
-  const cap = vertical ? CAP_V : CAP_H;
+
+  // Keep the latest committed view in a ref so the wheel listener (and drag
+  // math) never needs re-binding on every render.
+  const liveRef = useRef({ shown, min, max, span, half, vertical });
+  useEffect(() => {
+    liveRef.current = { shown, min, max, span, half, vertical };
+  });
 
   const pct = ((shown - min) / span) * 100;
-  const base = detent === undefined ? 0 : ((detent - min) / span) * 100;
-  const fillFrom = Math.min(base, pct);
-  const fillSize = Math.abs(pct - base);
+  const interiorDetent = detent !== undefined && detent > min && detent < max;
+  const basePct = interiorDetent ? ((detent as number) - min) / span * 100 : 0;
+  const fillFrom = Math.min(basePct, pct);
+  const fillSize = Math.abs(pct - basePct);
 
-  const valueAt = useCallback(
-    (clientX: number, clientY: number) => {
-      const el = trackRef.current;
-      if (!el) return shown;
-      const r = el.getBoundingClientRect();
-      const t = vertical
-        ? 1 - (clientY - r.top - cap / 2) / Math.max(1, r.height - cap)
-        : (clientX - r.left - cap / 2) / Math.max(1, r.width - cap);
-      return clamp(min + t * span, min, max);
-    },
-    [cap, max, min, shown, span, vertical],
-  );
+  const valueAt = useCallback((clientX: number, clientY: number) => {
+    const el = trackRef.current;
+    const l = liveRef.current;
+    if (!el) return l.shown;
+    const r = el.getBoundingClientRect();
+    const t = l.vertical
+      ? 1 - (clientY - r.top - l.half) / Math.max(1, r.height - l.half * 2)
+      : (clientX - r.left - l.half) / Math.max(1, r.width - l.half * 2);
+    return clamp(l.min + t * l.span, l.min, l.max);
+  }, []);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (disabled) return;
@@ -156,86 +169,62 @@ export function Fader({
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     setDrag(null);
-    flush(next);
+    flush(next); // always deliver the final value
   };
 
-  const step = (delta: number) => {
-    const next = clamp(shown + delta, min, max);
-    setDrag(null);
-    flush(next);
-  };
+  const jump = useCallback(
+    (to: number) => {
+      setDrag(null);
+      flush(clamp(to, liveRef.current.min, liveRef.current.max));
+    },
+    [flush],
+  );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (disabled) return;
     const fine = span / 100;
     const coarse = span / 10;
-    const up = vertical ? 'ArrowUp' : 'ArrowRight';
-    const down = vertical ? 'ArrowDown' : 'ArrowLeft';
-    switch (e.key) {
-      case up:
-      case 'ArrowUp':
-      case 'ArrowRight':
-        step(e.key === up || e.key === 'ArrowUp' || e.key === 'ArrowRight' ? fine : fine);
-        break;
-      case down:
-      case 'ArrowDown':
-      case 'ArrowLeft':
-        step(-fine);
-        break;
-      case 'PageUp':
-        step(coarse);
-        break;
-      case 'PageDown':
-        step(-coarse);
-        break;
-      case 'Home':
-        step(vertical ? max - shown : min - shown);
-        break;
-      case 'End':
-        step(vertical ? min - shown : max - shown);
-        break;
-      default:
-        return;
-    }
+    let to: number | null = null;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') to = shown + fine;
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') to = shown - fine;
+    else if (e.key === 'PageUp') to = shown + coarse;
+    else if (e.key === 'PageDown') to = shown - coarse;
+    else if (e.key === 'Home') to = min;
+    else if (e.key === 'End') to = max;
+    if (to === null) return;
     e.preventDefault();
+    jump(to);
   };
 
   const onDoubleClick = () => {
     if (disabled || detent === undefined) return;
-    setDrag(null);
-    flush(clamp(detent, min, max));
+    jump(detent);
   };
 
-  // Wheel needs a non-passive listener to be able to preventDefault.
+  // Wheel must be non-passive so it can preventDefault (no page scroll).
   useEffect(() => {
     const el = trackRef.current;
     if (!el || disabled) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const dir = e.deltaY > 0 ? -1 : 1;
-      flush(clamp(shown + dir * (span / 100), min, max));
+      const l = liveRef.current;
+      jump(l.shown + (e.deltaY > 0 ? -1 : 1) * (l.span / 100));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [disabled, flush, max, min, shown, span]);
+  }, [disabled, jump]);
 
-  const capStyle = vertical
-    ? ({ bottom: `calc(${pct}% * (1 - ${cap}px / 100%) + ${cap / 2}px)` } as React.CSSProperties)
-    : ({ left: `calc(${pct}% * (1 - ${cap}px / 100%) + ${cap / 2}px)` } as React.CSSProperties);
-
-  const runStyle = vertical
-    ? ({ bottom: `calc(${fillFrom}% * (1 - ${cap}px / 100%) + ${cap / 2}px)`, height: `calc(${fillSize}% * (1 - ${cap}px / 100%))` } as React.CSSProperties)
-    : ({ left: `calc(${fillFrom}% * (1 - ${cap}px / 100%) + ${cap / 2}px)`, width: `calc(${fillSize}% * (1 - ${cap}px / 100%))` } as React.CSSProperties);
-
-  const detentStyle =
-    detent === undefined
-      ? undefined
-      : vertical
-        ? ({ bottom: `calc(${base}% * (1 - ${cap}px / 100%) + ${cap / 2}px)` } as React.CSSProperties)
-        : ({ left: `calc(${base}% * (1 - ${cap}px / 100%) + ${cap / 2}px)` } as React.CSSProperties);
+  const along = (p: number) => `${p}%`;
+  const capStyle: React.CSSProperties = vertical ? { bottom: along(pct) } : { left: along(pct) };
+  const fillStyle: React.CSSProperties = vertical
+    ? { bottom: along(fillFrom), height: along(fillSize) }
+    : { left: along(fillFrom), width: along(fillSize) };
+  const markPct = detent === undefined ? 0 : ((clamp(detent, min, max) - min) / span) * 100;
+  const detentStyle: React.CSSProperties | undefined =
+    detent === undefined ? undefined : vertical ? { bottom: along(markPct) } : { left: along(markPct) };
 
   const text = fmt(shown);
-  const title = `${label} — ${text}${detent !== undefined ? ' (double-click to centre)' : ''}`;
+  const title = `${label} — ${text}${detent === undefined ? '' : ' · double-click to snap'}`;
 
   return (
     <div
@@ -266,12 +255,13 @@ export function Fader({
         onKeyDown={onKeyDown}
         onDoubleClick={onDoubleClick}
       >
-        <div className="fader-rail" />
-        <div className="fader-ticks" aria-hidden="true" />
-        {detentStyle && <div className="fader-detent" style={detentStyle} aria-hidden="true" />}
-        <div className="fader-fill" style={runStyle} aria-hidden="true" />
-        <div className="fader-cap" style={capStyle}>
-          <span className="fader-cap-line" />
+        <div className="fader-rail" aria-hidden="true" />
+        <div className="fader-run" aria-hidden="true">
+          {detentStyle && <div className="fader-detent" style={detentStyle} />}
+          <div className="fader-fill" style={fillStyle} />
+          <div className="fader-cap" style={capStyle}>
+            <span className="fader-cap-line" />
+          </div>
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import type {
   Deck,
   DeckId,
   Listener,
+  Mixer,
   ReactionKind,
   RoomState,
   Role,
@@ -257,7 +258,7 @@ const eqDeck = (a: Deck | null, b: Deck | null): boolean =>
     a.killHigh === b.killHigh &&
     eqVideo(a.video, b.video));
 
-const eqMixer = (a: RoomState['mixer'] | null, b: RoomState['mixer'] | null): boolean =>
+const eqMixer = (a: Mixer | null, b: Mixer | null): boolean =>
   a === b ||
   (!!a &&
     !!b &&
@@ -315,7 +316,7 @@ const selStatus = (s: StoreState) => s.status;
 const selQueue = (s: StoreState) => s.room?.queue ?? EMPTY_VIDEOS;
 const selChat = (s: StoreState) => s.chat;
 const selListeners = (s: StoreState) => s.room?.listeners ?? EMPTY_LISTENERS;
-const selMixer = (s: StoreState) => s.room?.mixer ?? null;
+const selMixer = (s: StoreState): Mixer | null => s.room?.mixer ?? null;
 const selBursts = (s: StoreState) => s.bursts;
 const selMonitor = (s: StoreState) => s.monitor;
 const selTitle = (s: StoreState) => s.room?.title ?? '';
@@ -332,7 +333,7 @@ export function useDeck(id: DeckId): Deck | null {
   return useSlice(sel, eqDeck);
 }
 
-export function useMixer(): RoomState['mixer'] | null {
+export function useMixer(): Mixer | null {
   return useSlice(selMixer, eqMixer);
 }
 

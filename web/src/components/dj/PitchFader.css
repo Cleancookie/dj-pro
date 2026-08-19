@@ -1,0 +1,138 @@
+.pf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.pf-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+
+.pf-body {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding-top: 7px;
+}
+
+.pf-ticks {
+  position: relative;
+  width: 11px;
+  height: 120px;
+}
+
+.pf-tick {
+  position: absolute;
+  right: 0;
+  width: 6px;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--line-2);
+}
+
+.pf-tick.is-at {
+  width: 11px;
+  background: var(--deck, var(--a));
+  box-shadow: 0 0 6px var(--deck-glow, transparent);
+}
+
+.pf-track {
+  position: relative;
+  width: 26px;
+  height: 120px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(90deg, var(--sunk), var(--panel-2) 45%, var(--sunk));
+  box-shadow: var(--sh-in), 0 0 0 1px var(--line);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.pf-track::before {
+  /* recessed slot the cap rides in */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 99px;
+  background: var(--bg);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.pf-track:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 2px;
+}
+
+.pf-detent {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  height: 1px;
+  background: var(--ink-4);
+  opacity: 0.9;
+}
+
+.pf-cap {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  width: 32px;
+  height: 15px;
+  margin-top: -7.5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  box-shadow: var(--bevel), 0 2px 5px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--line-2);
+  transition: box-shadow var(--fast);
+  pointer-events: none;
+}
+
+.pf-cap i {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--ink-4);
+}
+
+.pf-track.is-centred .pf-cap {
+  box-shadow: var(--bevel), 0 2px 5px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--deck, var(--a));
+}
+
+.pf-track.is-centred .pf-cap i {
+  background: var(--deck, var(--a));
+  box-shadow: 0 0 6px var(--deck-glow, transparent);
+}
+
+.pf-read {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+
+.pf-pct {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.pf-snap {
+  font-size: 9px;
+  color: var(--warn);
+  cursor: help;
+}
+
+.pf-snap.is-ok {
+  color: var(--ink-3);
+}

@@ -1,0 +1,133 @@
+.jog-holder {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.jog {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  background: radial-gradient(circle at 50% 30%, var(--panel-3), var(--sunk) 78%);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  flex: 0 0 auto;
+}
+
+.jog.is-dragging { cursor: grabbing; }
+.jog.is-empty { cursor: default; opacity: 0.55; }
+.jog:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 2px;
+}
+
+/* outer rubber ring — the pitch-bend surface */
+.jog-rubber {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.045) 0deg 1.6deg, transparent 1.6deg 3.2deg),
+    radial-gradient(circle, transparent 68%, var(--panel-2) 69%, var(--sunk) 100%);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 2px 6px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+/* brushed-metal face — rotates with playback */
+.jog-face {
+  position: absolute;
+  inset: 21px;
+  border-radius: 50%;
+  will-change: transform;
+  background:
+    conic-gradient(
+      from 0deg,
+      rgba(255,255,255,0.05),
+      rgba(255,255,255,0.008) 18%,
+      rgba(255,255,255,0.07) 32%,
+      rgba(255,255,255,0.012) 51%,
+      rgba(255,255,255,0.06) 68%,
+      rgba(255,255,255,0.008) 84%,
+      rgba(255,255,255,0.05)
+    ),
+    radial-gradient(circle at 42% 34%, var(--panel-3), var(--panel) 72%, var(--sunk));
+  box-shadow: inset 0 0 0 1px var(--line-2), 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.jog-grain {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 255, 255, 0.035) 0deg 0.7deg,
+    transparent 0.7deg 1.4deg
+  );
+  mix-blend-mode: screen;
+}
+
+/* position marker — the "where is the platter" line */
+.jog-marker {
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  width: 2px;
+  height: 26px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, var(--deck, var(--a)), transparent);
+  box-shadow: 0 0 6px var(--deck-glow, transparent);
+}
+
+.jog-hub {
+  position: absolute;
+  inset: 47px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--sunk);
+  box-shadow: inset 0 0 0 1px var(--line-2), 0 0 0 1px rgba(0, 0, 0, 0.6), var(--sh-in);
+  pointer-events: none;
+}
+
+.jog-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.62;
+  filter: saturate(0.8);
+}
+
+.jog-letter {
+  font: 700 26px/1 var(--ui);
+  letter-spacing: 0.04em;
+  color: var(--deck, var(--a));
+  opacity: 0.9;
+}
+
+.jog-mode {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--panel-2);
+  transition: color var(--fast), box-shadow var(--fast), border-color var(--fast);
+}
+
+.jog-mode.is-active {
+  color: var(--deck, var(--a));
+  border-color: var(--deck, var(--a));
+  box-shadow: 0 0 0 1px var(--deck, var(--a)), 0 0 12px var(--deck-glow, transparent);
+}

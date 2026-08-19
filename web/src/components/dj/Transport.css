@@ -1,0 +1,112 @@
+.tp {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.6fr 0.8fr 0.8fr 1fr;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.tp-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 38px;
+  padding: 4px 2px 3px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  box-shadow: var(--bevel), 0 1px 2px rgba(0, 0, 0, 0.55);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast), box-shadow var(--fast), background var(--fast);
+}
+
+.tp-btn svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.tp-cap {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  line-height: 1;
+}
+
+.tp-cap-lg {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+}
+
+.tp-btn:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink-4);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel-2));
+}
+
+.tp-btn:active:not(:disabled) {
+  box-shadow: var(--sh-in);
+}
+
+.tp-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.tp-btn:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 1px;
+}
+
+.tp-play {
+  min-height: 44px;
+}
+
+.tp-play svg {
+  width: 19px;
+  height: 19px;
+}
+
+.tp-play.is-playing {
+  color: var(--live);
+  border-color: var(--live);
+  box-shadow: 0 0 0 1px var(--live), 0 0 12px color-mix(in srgb, var(--live) 35%, transparent);
+}
+
+.tp-play.is-playing .tp-cap {
+  color: var(--live);
+}
+
+.tp-cue.is-on {
+  color: var(--cue);
+  border-color: var(--cue);
+  box-shadow: 0 0 0 1px var(--cue), 0 0 12px color-mix(in srgb, var(--cue) 35%, transparent);
+}
+
+.tp-cue.is-on .tp-cap {
+  color: var(--cue);
+}
+
+.tp-loop.is-on {
+  color: var(--deck, var(--a));
+  border-color: var(--deck, var(--a));
+  box-shadow: 0 0 0 1px var(--deck, var(--a)), 0 0 12px var(--deck-glow, transparent);
+}
+
+.tp-loop.is-on .tp-cap {
+  color: var(--deck, var(--a));
+}
+
+.tp-sm.is-set .tp-cap-lg {
+  color: var(--deck, var(--a));
+}
+
+.tp-sm.is-set {
+  border-color: var(--deck-dim, var(--a-dim));
+}

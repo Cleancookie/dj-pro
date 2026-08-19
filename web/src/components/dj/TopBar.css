@@ -1,0 +1,220 @@
+.tb {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--sh-2);
+}
+
+/* ---- wordmark ---- */
+.tb-mark {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.tb-mark-glyph {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(135deg, var(--a), var(--b));
+  box-shadow: 0 0 14px -4px var(--a-glow), var(--bevel);
+}
+.tb-mark-text {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.tb-mark-text b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ---- editable title ---- */
+.tb-title {
+  flex: 1 1 240px;
+  min-width: 120px;
+  max-width: 420px;
+  height: 30px;
+  padding: 0 9px;
+  font-size: 13px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: background var(--fast), border-color var(--fast);
+}
+.tb-title::placeholder {
+  color: var(--ink-4);
+}
+.tb-title:hover {
+  border-color: var(--line);
+  background: var(--sunk);
+}
+.tb-title:focus {
+  border-color: var(--a-dim);
+  background: var(--sunk);
+  box-shadow: var(--sh-in);
+}
+
+/* ---- live pill ---- */
+.tb-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 99px;
+  border: 1px solid var(--line-2);
+  background: var(--sunk);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  color: var(--ink-3);
+  transition: color var(--fast), border-color var(--fast), box-shadow var(--fast);
+}
+.tb-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  transition: background var(--fast), box-shadow var(--fast);
+}
+.tb-pill.is-live {
+  color: var(--live);
+  border-color: var(--live);
+  box-shadow: 0 0 12px -3px var(--live);
+}
+.tb-pill.is-live .tb-dot {
+  background: var(--live);
+  box-shadow: 0 0 8px var(--live);
+  animation: tb-blink 1.6s ease-in-out infinite;
+}
+@keyframes tb-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---- crowd ---- */
+.tb-crowd {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--ink-3);
+}
+.tb-crowd-glyph {
+  color: var(--cue);
+  font-size: 12px;
+}
+.tb-crowd-n {
+  font-size: 14px;
+  color: var(--ink);
+}
+.tb-crowd-word {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+/* ---- master meter ---- */
+.tb-meter {
+  flex: 0 0 auto;
+  position: relative;
+  width: 110px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--sunk);
+  box-shadow: var(--sh-in);
+  overflow: hidden;
+}
+.tb-meter-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--live) 0%, var(--live) 62%, var(--warn) 84%, var(--hot) 100%);
+  background-size: 110px 100%;
+}
+
+/* ---- audience link ---- */
+.tb-link {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 8px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+}
+.tb-link-a {
+  font-size: 11px;
+  color: var(--ink-2);
+  text-decoration: none;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tb-link-a:hover {
+  color: var(--a);
+}
+.tb-btn {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  background: var(--panel-3);
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast);
+}
+.tb-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+.tb-btn.is-ok {
+  color: var(--live);
+  border-color: var(--live);
+}
+
+/* ---- icon buttons ---- */
+.tb-icon {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: var(--ink-3);
+  background: var(--panel-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast);
+}
+.tb-icon:hover {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+.tb-icon:focus-visible,
+.tb-btn:focus-visible,
+.tb-link-a:focus-visible {
+  outline: 1px solid var(--a);
+  outline-offset: 1px;
+}

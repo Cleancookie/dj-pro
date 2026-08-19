@@ -49,6 +49,9 @@ func NewHub(cfg *Config, store *Store) *Hub {
 		done:    make(chan struct{}),
 	}
 	h.state.ServerNow = nowMs()
+	// state.go leaves the automation zero-valued; give the curve a legal value from the start so
+	// the initial snapshot matches the Automation union in lib/protocol.ts.
+	h.state.Mixer.Auto.Curve = "smooth"
 	if store != nil {
 		if snap, err := store.Load(); err != nil {
 			log.Printf("restore: %v", err)

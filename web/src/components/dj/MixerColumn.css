@@ -1,0 +1,316 @@
+/* The mixer column — 200px of fixed-width control chassis. */
+.mixer {
+  height: 100%;
+  min-height: 0;
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: linear-gradient(180deg, var(--panel), var(--bg) 140%);
+}
+
+.mx-sec {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--sh-1);
+  min-width: 0;
+}
+
+.mx-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.mx-head-label {
+  flex: 1 1 auto;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mx-chip {
+  flex: 0 0 auto;
+  font-size: 8px;
+  line-height: 12px;
+  padding: 0 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  cursor: help;
+}
+.mx-chip.is-auto {
+  color: var(--warn);
+  border-color: var(--warn);
+  animation: mx-pulse 900ms ease-in-out infinite;
+}
+@keyframes mx-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* ---- monitor ---- */
+.mx-knobs {
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+/* ---- eq kill grid ---- */
+.mx-eq-grid {
+  display: grid;
+  grid-template-columns: 26px 1fr 1fr;
+  gap: 3px;
+  align-items: center;
+}
+.mx-eq-line {
+  display: contents;
+}
+.mx-eq-ch {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-align: center;
+  color: var(--deck);
+}
+.mx-eq-band {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.mx-kill {
+  height: 22px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  box-shadow: var(--bevel);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color var(--fast), background var(--fast), border-color var(--fast), box-shadow var(--fast);
+}
+.mx-kill:hover:not(:disabled) {
+  color: var(--ink-2);
+  border-color: var(--ink-4);
+}
+.mx-kill.is-on {
+  color: var(--bg);
+  background: var(--deck);
+  border-color: var(--deck);
+  box-shadow: 0 0 0 1px var(--deck), 0 0 12px var(--deck-glow);
+}
+.mx-kill:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.mx-kill:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 1px;
+}
+
+/* ---- channel faders + level meters ---- */
+.mx-chans {
+  flex: 1 1 auto;
+  min-height: 84px;
+}
+.mx-chan-row {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+}
+.mx-chan {
+  display: grid;
+  grid-template-columns: 8px 44px;
+  gap: 5px;
+  height: 100%;
+  min-height: 0;
+}
+.mx-chan .fader-head {
+  height: 26px;
+}
+.mx-meter {
+  position: relative;
+  margin: 29px 0 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: linear-gradient(to top, var(--live) 0%, var(--live) 58%, var(--warn) 82%, var(--hot) 100%);
+  box-shadow: var(--sh-in);
+}
+.mx-meter-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 100%;
+  background: var(--sunk);
+  box-shadow: var(--sh-in);
+}
+.mx-meter-peak {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  bottom: 0;
+  opacity: 0;
+  background: var(--ink);
+  transition: opacity var(--med);
+}
+
+/* ---- crossfader ---- */
+.mx-xf-val {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--ink);
+}
+.mx-xf .fader-head {
+  display: none;
+}
+.mx-xf-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mx-xf-fader {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mx-xf .fader-track {
+  height: 34px;
+}
+.mx-xf .fader-cap {
+  height: 34px;
+  margin-top: -17px;
+}
+.mx-xf-end {
+  flex: 0 0 auto;
+  width: 11px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-4);
+  transition: color var(--fast), text-shadow var(--fast);
+}
+.mx-xf-end.is-live {
+  color: var(--deck);
+  text-shadow: 0 0 10px var(--deck-glow);
+}
+
+/* ---- transition ---- */
+.mx-kinds {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+}
+.mx-kind {
+  height: 22px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  box-shadow: var(--bevel);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color var(--fast), background var(--fast), border-color var(--fast);
+}
+.mx-kind:hover:not(:disabled) {
+  color: var(--ink-2);
+  border-color: var(--ink-4);
+}
+.mx-kind.is-on {
+  color: var(--bg);
+  background: var(--ink-2);
+  border-color: var(--ink);
+  font-weight: 600;
+}
+.mx-kind:focus-visible {
+  outline: 1px solid var(--a);
+  outline-offset: 1px;
+}
+.mx-dur .fader-track {
+  height: 22px;
+}
+.mx-dur .fader-cap {
+  height: 22px;
+  margin-top: -11px;
+}
+
+.mx-fire-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.mx-fire {
+  position: relative;
+  overflow: hidden;
+  height: 30px;
+  border: 1px solid var(--deck-dim);
+  border-radius: var(--r-sm);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  box-shadow: var(--bevel);
+  color: var(--deck);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color var(--fast), box-shadow var(--fast);
+}
+.mx-fire:hover:not(:disabled) {
+  border-color: var(--deck);
+  box-shadow: var(--bevel), 0 0 12px -3px var(--deck);
+}
+.mx-fire:active:not(:disabled) {
+  box-shadow: var(--sh-in);
+}
+.mx-fire.is-running {
+  border-color: var(--deck);
+  box-shadow: 0 0 0 1px var(--deck), 0 0 14px var(--deck-glow);
+}
+.mx-fire:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.mx-fire:focus-visible {
+  outline: 1px solid var(--deck);
+  outline-offset: 1px;
+}
+.mx-fire-sweep {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: var(--deck);
+  opacity: 0.26;
+  pointer-events: none;
+}
+.mx-fire-text {
+  position: relative;
+}
+
+/* ---- master ---- */
+.mx-master .fader-value {
+  color: var(--live);
+}

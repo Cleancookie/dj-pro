@@ -1,6 +1,9 @@
 .tl {
   position: relative;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--line);
   border-radius: var(--r);
   background: linear-gradient(180deg, var(--sunk), #0000);
@@ -10,10 +13,11 @@
 
 .tl-canvas-wrap {
   position: relative;
-  height: 74px;
+  flex: 1 1 auto;
+  min-height: 70px;
   border-radius: var(--r-sm);
   overflow: hidden;
-  cursor: text;
+  cursor: ew-resize;
   touch-action: none;
   background:
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 60px),

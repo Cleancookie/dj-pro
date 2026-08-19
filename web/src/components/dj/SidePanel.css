@@ -1,0 +1,428 @@
+.sp {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--panel), var(--bg) 160%);
+  overflow: hidden;
+}
+
+/* ---- tabs ---- */
+.sp-tabs {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.sp-tab {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast), background var(--fast);
+}
+.sp-tab:hover {
+  color: var(--ink-2);
+  background: var(--panel-3);
+}
+.sp-tab.is-on {
+  color: var(--ink);
+  border-bottom-color: var(--a);
+  background: var(--panel-3);
+}
+.sp-tab:focus-visible {
+  outline: 1px solid var(--a);
+  outline-offset: -2px;
+}
+.sp-tab-n {
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: var(--sunk);
+  color: var(--ink-3);
+  box-shadow: var(--sh-in);
+}
+.sp-tab.is-on .sp-tab-n {
+  color: var(--a);
+}
+
+.sp-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---- designed empty states ---- */
+.sp-empty {
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.sp-empty-plate {
+  width: 100%;
+  padding: 16px 10px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+}
+.sp-empty p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.sp-empty b {
+  color: var(--ink-2);
+}
+
+/* ---- queue ---- */
+.sp-queue {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sp-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px 46px 1fr auto;
+  align-items: center;
+  gap: 7px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--panel-2);
+  box-shadow: var(--sh-1);
+  cursor: grab;
+  transition: border-color var(--fast), background var(--fast);
+}
+.sp-row:hover {
+  border-color: var(--line-2);
+  background: var(--panel-3);
+}
+.sp-row.is-dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+.sp-row.is-before::before,
+.sp-row.is-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--a);
+  box-shadow: 0 0 8px var(--a);
+}
+.sp-row.is-before::before {
+  top: -3px;
+}
+.sp-row.is-after::after {
+  bottom: -3px;
+}
+.sp-row-n {
+  font-size: 10px;
+  color: var(--ink-4);
+  text-align: right;
+}
+.sp-thumb {
+  width: 46px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+  box-shadow: var(--sh-in);
+  overflow: hidden;
+  display: block;
+}
+.sp-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sp-row-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sp-row-title {
+  font-size: 11px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-row-sub {
+  display: flex;
+  gap: 4px;
+  font-size: 9px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-row-by {
+  color: var(--ink-4);
+}
+.sp-row-acts {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.sp-load {
+  height: 22px;
+  min-width: 26px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--deck);
+  background: var(--panel);
+  border: 1px solid var(--deck-dim);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel);
+  cursor: pointer;
+  transition: border-color var(--fast), box-shadow var(--fast);
+}
+.sp-load:hover {
+  border-color: var(--deck);
+  box-shadow: var(--bevel), 0 0 10px -3px var(--deck);
+}
+.sp-x {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  color: var(--ink-4);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast);
+}
+.sp-x:hover {
+  color: var(--hot);
+  border-color: var(--hot);
+}
+.sp-load:focus-visible,
+.sp-x:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 1px;
+}
+.sp-drop-end {
+  list-style: none;
+  height: 14px;
+  border-radius: var(--r-sm);
+  transition: background var(--fast);
+}
+.sp-drop-end.is-over {
+  background: linear-gradient(to bottom, var(--a-glow), transparent);
+}
+
+/* ---- chat ---- */
+.sp-chat {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sp-chat-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sp-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 7px;
+  border-left: 2px solid var(--line-2);
+}
+.sp-msg.is-dj {
+  border-left-color: var(--a);
+}
+.sp-msg-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.sp-msg-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-msg.is-dj .sp-msg-name {
+  color: var(--a);
+}
+.sp-msg-at {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--ink-4);
+}
+.sp-msg-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.sp-badge {
+  flex: 0 0 auto;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  padding: 0 4px;
+  line-height: 13px;
+  color: var(--bg);
+  background: var(--a);
+  border-radius: 3px;
+}
+.sp-jump {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 48px;
+  height: 22px;
+  padding: 0 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--a);
+  border: none;
+  border-radius: 99px;
+  box-shadow: var(--sh-2);
+  cursor: pointer;
+}
+.sp-chat-form {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 5px;
+  padding: 7px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.sp-chat-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  box-shadow: var(--sh-in);
+  outline: none;
+}
+.sp-chat-input::placeholder {
+  color: var(--ink-4);
+}
+.sp-chat-input:focus {
+  border-color: var(--a-dim);
+}
+.sp-send {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 11px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel);
+  cursor: pointer;
+  transition: border-color var(--fast), color var(--fast);
+}
+.sp-send:hover:not(:disabled) {
+  border-color: var(--a);
+  color: var(--a);
+}
+.sp-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---- crowd ---- */
+.sp-crowd {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sp-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+}
+.sp-person:hover {
+  background: var(--panel-2);
+}
+.sp-person.is-dj {
+  border-color: var(--a-dim);
+  background: var(--panel-2);
+}
+.sp-avatar {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: var(--bevel);
+}
+.sp-person-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-person.is-dj .sp-person-name {
+  color: var(--ink);
+}

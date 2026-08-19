@@ -1,0 +1,75 @@
+/* Rotary knob primitive — vertical drag to turn. */
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+}
+.knob-dial {
+  width: var(--knob-size, 42px);
+  height: var(--knob-size, 42px);
+  border-radius: 50%;
+  touch-action: none;
+  cursor: ns-resize;
+  outline: none;
+  background: radial-gradient(circle at 50% 30%, var(--panel-3), var(--sunk) 78%);
+  box-shadow: var(--sh-in), 0 1px 0 rgba(255, 255, 255, 0.04);
+  display: grid;
+  place-items: center;
+}
+.knob-dial:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 2px;
+}
+.knob-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.knob-arc-bg {
+  fill: none;
+  stroke: var(--line-2);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.knob-arc {
+  fill: none;
+  stroke: var(--deck, var(--a));
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.knob-body {
+  fill: var(--panel-2);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.knob-dial:hover .knob-body {
+  fill: var(--panel-3);
+}
+.knob-pointer {
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.knob.is-dragging .knob-body {
+  fill: var(--panel-3);
+  stroke: var(--deck, var(--a));
+}
+.knob.is-dragging .knob-pointer {
+  stroke: var(--deck, var(--a));
+}
+.knob-value {
+  font-size: 10px;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.knob-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  line-height: 1.2;
+  white-space: nowrap;
+}

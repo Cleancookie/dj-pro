@@ -24,7 +24,10 @@ docker:
 
 check:
 	cd server && gofmt -l . && go vet ./...
-	cd web && npx tsc --noEmit
+	cd web && npm run check
 
 clean:
 	rm -rf web/dist server/web-dist server/dj-pro
+
+smoke: ## end-to-end protocol + sync test against a running server
+	BASE=$${BASE:-http://localhost:8080} DJ_PASSWORD=$${DJ_PASSWORD:-letmein} node test/smoke.mjs

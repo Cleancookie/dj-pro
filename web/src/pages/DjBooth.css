@@ -1,0 +1,430 @@
+/* ------------------------------------------------------------- booth layout */
+.booth-page {
+  height: 100dvh;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.booth {
+  min-width: 1300px;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(390px, 1fr) 200px minmax(390px, 1fr) 320px;
+  grid-template-rows: 56px minmax(0, 1fr) 148px;
+  grid-template-areas:
+    'top top top top'
+    'da  mx  db  side'
+    'lib lib lib side';
+  overflow: hidden;
+}
+.booth > * {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.booth-top {
+  grid-area: top;
+}
+.slot-a {
+  grid-area: da;
+}
+.booth-mixer {
+  grid-area: mx;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+.slot-b {
+  grid-area: db;
+}
+.booth-side {
+  grid-area: side;
+  border-left: 1px solid var(--line);
+}
+.booth-lib {
+  grid-area: lib;
+}
+
+/* The focused deck is where [ and ] land, so it needs a quiet marker. */
+.booth-slot {
+  position: relative;
+  padding: 5px;
+  transition: box-shadow var(--med);
+}
+.booth-slot.is-focused {
+  box-shadow: inset 0 0 0 1px var(--deck-dim);
+}
+.booth-slot.is-focused::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--deck);
+  box-shadow: 0 0 10px var(--deck-glow);
+  pointer-events: none;
+}
+
+.booth-narrow {
+  display: none;
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  z-index: 60;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--warn);
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  border-radius: 99px;
+  box-shadow: var(--sh-2);
+}
+@media (max-width: 1299px) {
+  .booth-narrow {
+    display: block;
+  }
+}
+
+/* ------------------------------------------------------- connection banner */
+.conn {
+  position: fixed;
+  z-index: 70;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 99px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--warn);
+  box-shadow: var(--sh-2), 0 0 24px -8px var(--warn);
+}
+.conn-closed {
+  border-color: var(--hot);
+  box-shadow: var(--sh-2), 0 0 24px -8px var(--hot);
+}
+.conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  animation: conn-blink 900ms ease-in-out infinite;
+}
+.conn-closed .conn-dot {
+  background: var(--hot);
+}
+@keyframes conn-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* --------------------------------------------------------------- auth gate */
+.gate {
+  position: relative;
+  height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+}
+.gate::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(620px 380px at 34% 16%, var(--a-glow), transparent 70%),
+    radial-gradient(560px 340px at 68% 84%, var(--b-glow), transparent 70%);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ---- boot splash ---- */
+.gate-spinner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.gate-platter {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background:
+    conic-gradient(from 0deg, transparent 0deg, var(--a) 70deg, transparent 150deg),
+    radial-gradient(circle at 50% 50%, var(--panel-3) 26%, var(--sunk) 28%);
+  box-shadow: var(--sh-2), inset 0 0 0 1px var(--line-2);
+  animation: gate-spin 900ms linear infinite;
+}
+.gate-platter-dot {
+  position: absolute;
+  inset: 42%;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
+@keyframes gate-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.gate-spinner-text {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+
+/* ---- login card ---- */
+.login {
+  position: relative;
+  width: 366px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 26px 22px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xl);
+  box-shadow: 0 24px 70px -20px rgba(0, 0, 0, 0.9), var(--bevel);
+}
+.login::before {
+  content: '';
+  position: absolute;
+  left: 26px;
+  right: 26px;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--a), var(--b), transparent);
+  opacity: 0.7;
+}
+.login.is-shake {
+  animation: login-shake 320ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+@keyframes login-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-7px); }
+  40%, 60% { transform: translateX(7px); }
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.login-glyph {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r);
+  background: linear-gradient(135deg, var(--a), var(--b));
+  box-shadow: 0 0 22px -6px var(--a-glow), var(--bevel);
+}
+.login-word {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+.login-word b {
+  color: var(--ink);
+}
+.login-tag {
+  margin: 6px 0 22px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-4);
+}
+
+.login-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+.login-input {
+  height: 38px;
+  padding: 0 12px;
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+  background: var(--sunk);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--sh-in);
+  outline: none;
+  transition: border-color var(--fast), box-shadow var(--fast);
+}
+.login-input::placeholder {
+  color: var(--ink-4);
+  letter-spacing: 0.1em;
+}
+.login-input:focus {
+  border-color: var(--a);
+  box-shadow: var(--sh-in), 0 0 0 1px var(--a-dim);
+}
+.login-input[aria-invalid='true'] {
+  border-color: var(--hot);
+}
+
+.login-go {
+  margin-top: 14px;
+  height: 40px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--bg);
+  background: linear-gradient(180deg, var(--a), var(--a-dim));
+  border: 1px solid var(--a);
+  border-radius: var(--r);
+  box-shadow: 0 0 26px -8px var(--a), var(--bevel);
+  cursor: pointer;
+  transition: filter var(--fast), box-shadow var(--fast);
+}
+.login-go:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 0 32px -6px var(--a), var(--bevel);
+}
+.login-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+}
+.login-go:focus-visible,
+.login-input:focus-visible {
+  outline: 1px solid var(--a);
+  outline-offset: 2px;
+}
+
+.login-error {
+  min-height: 15px;
+  margin: 9px 0 0;
+  font-size: 11px;
+  color: var(--hot);
+  opacity: 0;
+  transition: opacity var(--fast);
+}
+.login-error.is-shown {
+  opacity: 1;
+}
+.login-foot {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  line-height: 1.65;
+  color: var(--ink-4);
+}
+.login-foot code {
+  font-family: var(--mono);
+  color: var(--ink-2);
+}
+.login-foot a {
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.login-foot a:hover {
+  color: var(--a);
+}
+
+/* ---------------------------------------------------- shortcut overlay ---- */
+.ov {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(3px);
+}
+.ov-card {
+  width: 480px;
+  max-width: 100%;
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 18px 20px 16px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 70px -20px rgba(0, 0, 0, 0.9);
+}
+.ov-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.ov-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+.ov-x {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--panel-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.ov-x:hover {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+.ov-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ov-item {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border-radius: var(--r-sm);
+}
+.ov-item:hover {
+  background: var(--panel-3);
+}
+.ov-item dt {
+  margin: 0;
+}
+.ov-item dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.ov-list kbd {
+  display: inline-block;
+  min-width: 30px;
+  padding: 3px 7px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel), 0 1px 0 var(--line-2);
+}
+.ov-foot {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--ink-4);
+}

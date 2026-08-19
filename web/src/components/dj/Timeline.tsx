@@ -3,9 +3,8 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { DeckId } from '../../lib/protocol';
 import { cmd, useDeck } from '../../lib/store';
 import { setScrub, usePlayhead } from '../../lib/engine';
-import { beatGrid, deckPosition, fmtTime } from '../../lib/deckmath';
+import { beatGrid, fmtTime } from '../../lib/deckmath';
 import { waveformBars } from '../../lib/waveform';
-import { clock } from '../../lib/clock';
 import './Timeline.css';
 
 /* ------------------------------------------------------------------ helpers */
@@ -105,6 +104,8 @@ export function Timeline({ id }: { id: DeckId }) {
   const tipRef = useRef<HTMLDivElement | null>(null);
 
   const posRef = useRef(0);
+  const drawRef = useRef<() => void>(() => {});
+  const ariaSecRef = useRef(-1);
   const sizeRef = useRef({ w: 0, h: 0 });
   const palRef = useRef<Palette | null>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -160,8 +161,8 @@ export function Timeline({ id }: { id: DeckId }) {
       ctx.globalAlpha = 1;
       ctx.fillStyle = pal.ink3;
       ctx.font = '9px ui-monospace, monospace';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(deck?.video ? 'WAITING FOR DURATION' : 'NO TRACK', 6, mid);
+      ctx.textBaseline = 'top';
+      ctx.fillText(deck?.video ? 'WAITING FOR DURATION' : 'NO TRACK', 6, 4);
       return;
     }
 
@@ -264,7 +265,13 @@ export function Timeline({ id }: { id: DeckId }) {
     ctx.restore();
   }, [deck, dur, bars]);
 
-  /* ---- size + palette ---------------------------------------------------- */
+  /* ---- keep the latest draw reachable, and redraw on every state change --- */
+  useEffect(() => {
+    drawRef.current = draw;
+    draw();
+  }, [draw]);
+
+  /* ---- size + palette (set up once; redraws go through drawRef) ---------- */
   useEffect(() => {
     const wrap = wrapRef.current;
     const cvs = cvsRef.current;
@@ -282,18 +289,13 @@ export function Timeline({ id }: { id: DeckId }) {
       cvs.style.height = h + 'px';
       const ctx = cvs.getContext('2d');
       ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
-      draw();
+      drawRef.current();
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [draw]);
-
-  /* ---- redraw when deck state changes ------------------------------------ */
-  useEffect(() => {
-    draw();
-  }, [draw]);
+  }, []);
 
   /* ---- release anything still held on unmount ---------------------------- */
   useEffect(() => {
@@ -412,10 +414,6 @@ export function Timeline({ id }: { id: DeckId }) {
     if (tip) tip.style.opacity = '0';
   };
 
-  const onDoubleClick = () => {
-    if (deck) cmd({ action: 'deck.seek', deck: id, positionSec: deckPosition(deck, clock.now()) });
-  };
-
   return (
     <div className="tl">
       <div
@@ -426,13 +424,11 @@ export function Timeline({ id }: { id: DeckId }) {
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onPointerLeave={onLeave}
-        onDoubleClick={onDoubleClick}
         role="slider"
         tabIndex={0}
         aria-label={'Deck ' + id.toUpperCase() + ' timeline'}
         aria-valuemin={0}
         aria-valuemax={Math.round(dur)}
-        aria-valuenow={Math.round(posRef.current)}
         title="Click to seek · drag to scrub · drag the IN/OUT flags to move cue points · shift-drag to set a loop"
       >
         <canvas className="tl-canvas" ref={cvsRef} />
@@ -443,7 +439,12 @@ export function Timeline({ id }: { id: DeckId }) {
         onTick={(p) => {
           if (dragRef.current?.mode === 'scrub') return; // the drag owns the playhead
           posRef.current = p;
-          draw();
+          drawRef.current();
+          const sec = Math.floor(p);
+          if (sec !== ariaSecRef.current) {
+            ariaSecRef.current = sec;
+            wrapRef.current?.setAttribute('aria-valuenow', String(sec));
+          }
         }}
       />
     </div>
@@ -457,7 +458,9 @@ export function Timeline({ id }: { id: DeckId }) {
 function PlayheadTap({ id, onTick }: { id: DeckId; onTick: (pos: number) => void }) {
   const pos = usePlayhead(id);
   const cb = useRef(onTick);
-  cb.current = onTick;
+  useEffect(() => {
+    cb.current = onTick;
+  }, [onTick]);
   useEffect(() => {
     cb.current(pos);
   }, [pos]);
