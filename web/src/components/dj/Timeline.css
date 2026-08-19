@@ -1,0 +1,49 @@
+.tl {
+  position: relative;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: linear-gradient(180deg, var(--sunk), #0000);
+  box-shadow: var(--sh-in);
+  padding: 2px;
+}
+
+.tl-canvas-wrap {
+  position: relative;
+  height: 74px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  cursor: text;
+  touch-action: none;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 60px),
+    var(--sunk);
+}
+
+.tl-canvas-wrap.is-empty { cursor: default; }
+.tl-canvas-wrap:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 1px;
+}
+
+.tl-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tl-tip {
+  position: absolute;
+  bottom: 3px;
+  transform: translateX(-50%);
+  padding: 1px 4px;
+  font-size: 9px;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--fast);
+  white-space: nowrap;
+}

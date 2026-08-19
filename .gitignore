@@ -1,0 +1,7 @@
+node_modules/
+dist/
+data/*.json
+.env
+server/dj-pro
+server/web-dist/
+*.log

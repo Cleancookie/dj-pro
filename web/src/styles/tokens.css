@@ -1,0 +1,75 @@
+:root {
+  /* ---- surface ---- */
+  --bg: #08090b;
+  --bg-glow: #10131a;
+  --panel: #121418;
+  --panel-2: #171a20;
+  --panel-3: #1e222a;
+  --sunk: #0b0c0f;
+  --line: #23262e;
+  --line-2: #2e333d;
+
+  /* ---- ink ---- */
+  --ink: #eef1f6;
+  --ink-2: #a8b0bd;
+  --ink-3: #6b7480;
+  --ink-4: #454c57;
+
+  /* ---- decks ---- */
+  --a: #22d3ee;
+  --a-dim: #0e7490;
+  --a-glow: rgba(34, 211, 238, 0.35);
+  --b: #fb923c;
+  --b-dim: #b45309;
+  --b-glow: rgba(251, 146, 60, 0.35);
+
+  /* ---- semantic ---- */
+  --live: #4ade80;
+  --warn: #fbbf24;
+  --hot: #f43f5e;
+  --cue: #c084fc;
+
+  /* ---- geometry ---- */
+  --r-sm: 4px;
+  --r: 7px;
+  --r-lg: 12px;
+  --r-xl: 18px;
+
+  /* ---- depth ---- */
+  --sh-1: 0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.6);
+  --sh-2: 0 2px 14px rgba(0,0,0,0.55);
+  --sh-in: inset 0 2px 6px rgba(0,0,0,0.7);
+  --bevel: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.5);
+
+  /* ---- type ---- */
+  --ui: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+
+  --fast: 90ms cubic-bezier(.4,0,.2,1);
+  --med: 180ms cubic-bezier(.4,0,.2,1);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background:
+    radial-gradient(1200px 700px at 50% -10%, var(--bg-glow), transparent 70%),
+    var(--bg);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+button { font-family: inherit; color: inherit; }
+input, select { font-family: inherit; }
+::selection { background: var(--a-dim); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.deck-a { --deck: var(--a); --deck-dim: var(--a-dim); --deck-glow: var(--a-glow); }
+.deck-b { --deck: var(--b); --deck-dim: var(--b-dim); --deck-glow: var(--b-glow); }
+
+/* thin scrollbars everywhere */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
