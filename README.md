@@ -58,6 +58,25 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - **The DJ always wins.** Any manual fader move, load or pause takes effect immediately, and
   auto-advance picks up from whatever it finds.
 
+## Booth controls
+
+| key | action |
+|---|---|
+| `Q` / `P` | play-pause deck A / B |
+| `Space` | play-pause the off-air deck (the one you are prepping) |
+| `W` / `O` | cue-monitor deck A / B in your headphones |
+| `1` / `2` | fire the transition towards deck A / B |
+| `[` / `]` | set the IN / OUT point on the focused deck |
+| `F` | fullscreen · `?` shortcuts overlay |
+
+Shortcuts are ignored while you are typing in a field. The AUTO switch has deliberately *not* been
+bound to a key — it changes who is driving the set, and a stray keypress doing that is worse than
+reaching for the switch.
+
+The DJ hears either deck in their headphones while the audience hears only the main mix: `CUE` on a
+deck routes it to the monitor, and the CUE MIX knob blends monitor against master. All of that is
+local to the DJ's browser — the audience is never affected.
+
 ## How the sync works
 
 The server keeps one authoritative `RoomState` and re-stamps a per-deck time anchor
