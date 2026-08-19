@@ -1,0 +1,296 @@
+/* ── Stage: the two decks, cross-dissolving ─────────────────────────────── */
+.stage-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+
+.stage {
+  position: relative;
+  /* Fit the 16:9 box to whichever axis runs out first. The plain 100% is the
+     fallback for engines without container query units. */
+  width: 100%;
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 16 / 9;
+  --wa: 0;
+  --wb: 0;
+}
+
+/*
+ * Phones: a 16:9 box in a tall narrow viewport is width-bound, so letting the
+ * wrap stretch would dump all the surplus height into empty gutters. Instead the
+ * wrap takes exactly its own 16:9 height (capped so landscape still fits) and
+ * the column packs from the top — the leftover goes to the chat slice.
+ */
+@media (max-width: 900px) {
+  .stage-wrap {
+    flex: 0 1 auto;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 52dvh;
+  }
+}
+
+/* Ambient glow, tinted by whichever deck the crowd is actually hearing. */
+.stage-glow {
+  position: absolute;
+  inset: -6% -4%;
+  pointer-events: none;
+  z-index: 0;
+}
+.stage-glow span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  filter: blur(46px);
+  will-change: opacity;
+}
+.stage-glow-a {
+  background: radial-gradient(60% 60% at 30% 55%, var(--a-glow), transparent 72%);
+  opacity: calc(var(--wa) * 0.9);
+}
+.stage-glow-b {
+  background: radial-gradient(60% 60% at 70% 55%, var(--b-glow), transparent 72%);
+  opacity: calc(var(--wb) * 0.9);
+}
+
+.stage-frame {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--panel-2), var(--sunk) 70%);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-2), var(--bevel);
+  z-index: 1;
+}
+
+/* One deck layer. --op/--sc/--card are written by the rAF loop. */
+.stage-deck {
+  position: absolute;
+  inset: 0;
+  --op: 0;
+  --sc: 1;
+  --card: 0;
+  --z: 0;
+  --dir: 1;
+  opacity: var(--op);
+  z-index: var(--z);
+  transform: translate3d(calc(var(--card) * var(--dir) * 2.4%), calc(var(--card) * -3.2%), 0)
+    scale(var(--sc));
+  will-change: transform, opacity;
+  pointer-events: none;
+  border-radius: calc(var(--card) * var(--r));
+  overflow: hidden;
+  box-shadow:
+    0 0 0 calc(var(--card) * 1px) var(--deck),
+    0 calc(var(--card) * 16px) calc(var(--card) * 34px) rgba(0, 0, 0, 0.62);
+}
+.stage-deck.deck-a { transform-origin: 0% 100%; --dir: 1; }
+.stage-deck.deck-b { transform-origin: 100% 100%; --dir: -1; }
+
+.stage-mount,
+.stage-mount-skeleton {
+  position: absolute;
+  inset: 0;
+  background: var(--sunk);
+}
+/* The engine drops a YouTube iframe in here; nobody may touch its controls. */
+.stage-mount iframe,
+.stage-mount > * {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0;
+  pointer-events: none;
+}
+.stage-mount-skeleton {
+  background: linear-gradient(100deg, var(--sunk), var(--panel-2), var(--sunk));
+  background-size: 220% 100%;
+  animation: stage-shim 1.6s linear infinite;
+}
+@keyframes stage-shim {
+  to { background-position: -220% 0; }
+}
+
+/* Chrome that only exists once the layer has become a corner card. */
+.stage-card-chrome {
+  position: absolute;
+  inset: 0;
+  opacity: var(--card);
+  transition: opacity var(--fast);
+}
+.stage-next {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 10px 8px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.86));
+}
+.stage-next-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--deck);
+}
+.stage-next-title {
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stage-deck-letter {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: var(--r-sm);
+  background: var(--deck);
+  color: var(--bg);
+}
+.stage-card-buffer {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 12px;
+  height: 12px;
+  border-radius: 99px;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--deck);
+  animation: stage-spin 0.7s linear infinite;
+}
+@keyframes stage-spin {
+  to { transform: rotate(1turn); }
+}
+
+/* Idle / no-signal plate */
+.stage-idle {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 3;
+  background: radial-gradient(80% 80% at 50% 40%, var(--bg-glow), var(--sunk) 78%);
+}
+.stage-idle-plate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 30px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-lg);
+}
+.stage-idle-plate strong {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ink-2);
+}
+.stage-idle-plate em {
+  font-style: normal;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+.stage-idle-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 20px;
+}
+.stage-idle-eq i {
+  width: 3px;
+  height: 30%;
+  border-radius: 2px;
+  background: var(--ink-4);
+  animation: stage-eq 1.1s ease-in-out infinite;
+}
+.stage-idle-eq i:nth-child(2) { animation-delay: 0.12s; }
+.stage-idle-eq i:nth-child(3) { animation-delay: 0.24s; }
+.stage-idle-eq i:nth-child(4) { animation-delay: 0.36s; }
+.stage-idle-eq i:nth-child(5) { animation-delay: 0.48s; }
+@keyframes stage-eq {
+  0%, 100% { height: 25%; }
+  50% { height: 100%; }
+}
+
+/* Badges */
+.stage-badges {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 4;
+  pointer-events: none;
+}
+.stage-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  border: 1px solid var(--line-2);
+  backdrop-filter: blur(6px);
+}
+.stage-live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--ink-4);
+}
+.stage-live.is-on {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--live) 45%, transparent);
+}
+.stage-live.is-on i {
+  background: var(--live);
+  box-shadow: 0 0 8px var(--live);
+  animation: stage-pulse 1.8s ease-in-out infinite;
+}
+@keyframes stage-pulse {
+  50% { opacity: 0.35; }
+}
+.stage-buffer {
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  border: 1px solid var(--line-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-idle-eq i,
+  .stage-live.is-on i,
+  .stage-card-buffer,
+  .stage-mount-skeleton { animation: none; }
+}

@@ -1,0 +1,269 @@
+/* ── Now playing card ───────────────────────────────────────────────────── */
+.np {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: linear-gradient(var(--panel), var(--panel-2));
+  box-shadow: var(--sh-1);
+  min-width: 0;
+}
+
+.np-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.np-deck {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--deck);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 0 10px var(--deck-glow);
+}
+
+.np-titles { flex: 1 1 auto; min-width: 0; }
+.np-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-author {
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Incoming track during a transition */
+.np-incoming {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 34%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 9px;
+  border-left: 2px solid var(--deck);
+  background: var(--sunk);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.np-mixing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--deck);
+}
+.np-mixing i {
+  width: 2px;
+  height: 7px;
+  background: var(--deck);
+  border-radius: 1px;
+  animation: np-mixbar 0.66s ease-in-out infinite;
+}
+.np-mixing i:nth-child(2) { animation-delay: 0.16s; }
+.np-mixing i:nth-child(3) { animation-delay: 0.32s; }
+@keyframes np-mixbar {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1); }
+}
+.np-incoming-title {
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-incoming-author {
+  font-size: 9px;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+
+.np-bpm {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+}
+.np-bpm-val {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Progress */
+.np-prog {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.np-time {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.np-time-rem { color: var(--ink-3); }
+
+.np-bar {
+  position: relative;
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--sunk);
+  box-shadow: var(--sh-in);
+  overflow: hidden;
+}
+.np-bar-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--deck-dim), var(--deck));
+}
+.np-bar.is-playing .np-bar-fill {
+  box-shadow: 0 0 8px var(--deck-glow);
+}
+
+/* Local output controls */
+.np-ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.np-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: linear-gradient(var(--panel-3), var(--panel-2));
+  box-shadow: var(--bevel);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: color var(--fast), box-shadow var(--fast), border-color var(--fast);
+}
+.np-btn:hover { color: var(--ink); }
+.np-btn.is-on {
+  color: var(--ink);
+  border-color: var(--deck);
+  box-shadow: 0 0 0 1px var(--deck), 0 0 12px var(--deck-glow);
+}
+.np-btn:focus-visible,
+.np-vol input:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 1px;
+}
+
+.np-vol {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.np-vol input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 60px;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.np-vol input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--deck-dim) var(--fill, 50%), var(--sunk) var(--fill, 50%));
+  box-shadow: var(--sh-in);
+}
+.np-vol input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--deck-dim) var(--fill, 50%), var(--sunk) var(--fill, 50%));
+  box-shadow: var(--sh-in);
+}
+.np-vol input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border-radius: 3px;
+  background: linear-gradient(var(--ink-2), var(--ink-3));
+  border: 1px solid var(--sunk);
+  box-shadow: var(--bevel), 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.np-vol input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: linear-gradient(var(--ink-2), var(--ink-3));
+  border: 1px solid var(--sunk);
+  box-shadow: var(--bevel);
+}
+.np-vol-val {
+  flex: 0 0 auto;
+  width: 24px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+@media (max-width: 600px) {
+  .np { padding: 9px 10px; gap: 7px; }
+  .np-title { font-size: 13px; }
+  .np-incoming { max-width: 42%; }
+  .np-incoming-author { display: none; }
+}
+@media (max-width: 430px) {
+  .np-lead { gap: 8px; flex-wrap: wrap; }
+  .np-titles { flex: 1 1 60%; }
+  .np-incoming {
+    flex: 1 1 100%;
+    max-width: 100%;
+    order: 3;
+    flex-direction: row;
+    align-items: center;
+    gap: 7px;
+    border-radius: var(--r-sm);
+  }
+  .np-incoming-title { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-mixing i { animation: none; }
+}

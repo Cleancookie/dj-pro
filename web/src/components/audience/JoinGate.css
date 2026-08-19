@@ -1,0 +1,212 @@
+/* ── Join gate: the door, and the gesture that unlocks audio ────────────── */
+.jg {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* Background: one slow gradient drift plus three breathing rings. */
+.jg-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.jg-drift {
+  position: absolute;
+  inset: -30%;
+  background:
+    radial-gradient(38% 38% at 28% 32%, var(--a-glow), transparent 68%),
+    radial-gradient(42% 42% at 72% 62%, var(--b-glow), transparent 68%),
+    radial-gradient(50% 50% at 50% 50%, var(--bg-glow), transparent 70%);
+  filter: blur(30px);
+  opacity: 0.85;
+  will-change: transform;
+  animation: jg-drift 26s ease-in-out infinite alternate;
+}
+@keyframes jg-drift {
+  0% { transform: translate3d(-3%, -2%, 0) scale(1.02) rotate(0deg); }
+  50% { transform: translate3d(3%, 2%, 0) scale(1.1) rotate(4deg); }
+  100% { transform: translate3d(-2%, 3%, 0) scale(1.04) rotate(-3deg); }
+}
+
+.jg-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46vmax;
+  height: 46vmax;
+  margin: -23vmax 0 0 -23vmax;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  will-change: transform, opacity;
+  animation: jg-pulse 7s ease-out infinite;
+}
+.jg-ring-2 { animation-delay: 2.33s; border-color: color-mix(in srgb, var(--a) 22%, transparent); }
+.jg-ring-3 { animation-delay: 4.66s; border-color: color-mix(in srgb, var(--b) 22%, transparent); }
+@keyframes jg-pulse {
+  0% { transform: scale(0.45); opacity: 0; }
+  22% { opacity: 0.7; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+/* Card */
+.jg-card {
+  position: relative;
+  z-index: 1;
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding: 26px 24px 22px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  box-shadow: var(--sh-2), var(--bevel);
+  backdrop-filter: blur(14px);
+}
+
+.jg-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.jg-mark {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(140deg, var(--a), var(--b));
+  box-shadow: 0 0 18px var(--a-glow);
+}
+.jg-word {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--ink);
+}
+
+.jg-title {
+  margin: 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink-2);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.jg-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.jg-live,
+.jg-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ink-2);
+  text-align: center;
+}
+.jg-live i,
+.jg-empty i {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  flex: 0 0 auto;
+}
+.jg-live i {
+  background: var(--live);
+  box-shadow: 0 0 10px var(--live);
+  animation: jg-blink 1.8s ease-in-out infinite;
+}
+.jg-empty { color: var(--ink-3); }
+.jg-empty i { background: var(--ink-4); }
+@keyframes jg-blink { 50% { opacity: 0.3; } }
+
+.jg-crowd {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.jg-crowd .num { color: var(--ink); font-weight: 700; }
+
+.jg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.jg-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+.jg-input {
+  height: 40px;
+  padding: 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--sunk);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  box-shadow: var(--sh-in);
+}
+.jg-input:focus-visible {
+  outline: 1px solid var(--a);
+  outline-offset: 1px;
+  border-color: var(--a);
+}
+
+.jg-enter {
+  height: 52px;
+  border: 1px solid color-mix(in srgb, var(--a) 55%, transparent);
+  border-radius: var(--r);
+  background: linear-gradient(var(--a), var(--a-dim));
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--a-glow), 0 8px 26px var(--a-glow), var(--bevel);
+  transition: transform var(--fast), box-shadow var(--fast), filter var(--fast);
+}
+.jg-enter:hover { filter: brightness(1.08); box-shadow: 0 0 0 1px var(--a), 0 10px 30px var(--a-glow); }
+.jg-enter:active { transform: translateY(1px); }
+.jg-enter:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.jg-note {
+  margin: 0;
+  text-align: center;
+  font-size: 10px;
+  color: var(--ink-4);
+}
+
+@media (max-width: 400px) {
+  .jg { padding: 14px; }
+  .jg-card { padding: 20px 16px 18px; gap: 12px; border-radius: var(--r-lg); }
+  .jg-word { font-size: 17px; letter-spacing: 0.18em; }
+  .jg-enter { height: 48px; font-size: 13px; letter-spacing: 0.12em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jg-drift,
+  .jg-ring,
+  .jg-live i { animation: none; }
+  .jg-ring { opacity: 0.25; transform: scale(1); }
+}

@@ -1,0 +1,135 @@
+/* ── Audience page shell ────────────────────────────────────────────────── */
+.aud {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Top bar */
+.aud-top {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(var(--panel), var(--panel-2));
+  box-shadow: var(--sh-1);
+  z-index: 3;
+}
+
+.aud-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.aud-brand-mark {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: linear-gradient(140deg, var(--a), var(--b));
+  box-shadow: 0 0 10px var(--a-glow);
+}
+.aud-brand-text {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+.aud-room {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 1px solid var(--line);
+  padding-left: 12px;
+}
+
+.aud-meta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.aud-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  padding: 3px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 99px;
+  background: var(--sunk);
+}
+.aud-conn i {
+  width: 5px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--warn);
+  animation: aud-blink 1s steps(2, end) infinite;
+}
+.aud-conn.is-closed i { background: var(--hot); animation: none; }
+@keyframes aud-blink { 50% { opacity: 0.15; } }
+
+.aud-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.aud-count .lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+.aud-count .val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Body: stage column + chat rail */
+.aud-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+.aud-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 10px;
+  padding: 12px;
+}
+
+@media (max-width: 900px) {
+  .aud-top { height: 44px; padding: 0 10px; gap: 9px; }
+  .aud-main { padding: 8px 8px calc(6px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+}
+@media (max-width: 420px) {
+  .aud-room { font-size: 11px; padding-left: 9px; }
+}
+/* Only at the very small end does the count lose its label. */
+@media (max-width: 359px) {
+  .aud-count .lbl { display: none; }
+}
