@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"math"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -18,6 +20,13 @@ const (
 	maxBPM    = 300
 
 	maxTransitionMs = 60_000
+
+	// A planned transition is either "inherit the mixer default" (0) or a deliberate length.
+	minPlanMs = 500
+	maxPlanMs = 30_000
+
+	maxTrackSec = 24 * 3600
+	maxBatchAdd = 100 // one queue.addMany frame; the 32KB socket read limit is the real bound
 )
 
 // --- deck position anchoring ----------------------------------------------
@@ -125,6 +134,20 @@ type cmdFrame struct {
 	ID    string `json:"id"`
 	Index *int   `json:"index"`
 	Title string `json:"title"`
+
+	Videos  []*Video   `json:"videos"`
+	Plan    *planPatch `json:"plan"`
+	Enabled bool       `json:"enabled"`
+}
+
+// planPatch is a PARTIAL update of a queue item's Plan. Every field is a pointer so an omitted
+// key leaves the stored value alone - the DJ tweaking only the duration must not silently wipe
+// the cue points they set five minutes ago.
+type planPatch struct {
+	Kind       *string  `json:"kind"`
+	DurationMs *int64   `json:"durationMs"`
+	CueIn      *float64 `json:"cueIn"`
+	CueOut     *float64 `json:"cueOut"`
 }
 
 func validDeck(id string) bool { return id == "a" || id == "b" }
@@ -154,6 +177,7 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 		m := &h.state.Mixer
 		m.Crossfade = clamp(f.Value, -1, 1)
 		m.Auto.Active = false // a manual touch always wins
+		h.cancelRotation()    // ...including over an auto-advance rotation that was queued behind it
 		h.touch()
 
 	case "mixer.master":
@@ -177,7 +201,12 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 		h.touch()
 
 	case "mixer.fire":
-		h.fire(c, f.To, now)
+		if !validDeck(f.To) {
+			h.sendTo(c, encode(messageFrame{T: "error", Message: "unknown deck"}))
+			return
+		}
+		h.cancelRotation() // a manual fire is not the automation auto-advance was waiting on
+		h.startTransition(f.To, "", 0, now)
 
 	case "queue.add":
 		if len(h.state.Queue) >= maxQueueLen {
@@ -190,6 +219,55 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 			return
 		}
 		h.state.Queue = append(h.state.Queue, v)
+		h.touchPersist()
+
+	case "queue.addMany":
+		if len(f.Videos) == 0 {
+			return
+		}
+		if len(f.Videos) > maxBatchAdd {
+			f.Videos = f.Videos[:maxBatchAdd]
+		}
+		added, skipped, full := 0, 0, false
+		for _, raw := range f.Videos {
+			if len(h.state.Queue) >= maxQueueLen {
+				full = true
+				break
+			}
+			v := sanitizeVideo(raw, c.name)
+			if v == nil {
+				skipped++
+				continue // one bad row must not lose the rest of the playlist
+			}
+			h.state.Queue = append(h.state.Queue, v) // order preserved
+			added++
+		}
+		if added > 0 {
+			h.touchPersist()
+		}
+		if full {
+			h.sendTo(c, encode(messageFrame{T: "error", Message: "queue is full"}))
+		} else if skipped > 0 {
+			h.sendTo(c, encode(messageFrame{T: "error",
+				Message: fmt.Sprintf("added %d, skipped %d unusable video(s)", added, skipped)}))
+		}
+
+	case "queue.plan":
+		h.planQueueItem(c, f.ID, f.Plan)
+
+	case "autodj.set":
+		if h.state.AutoDJ.Enabled == f.Enabled {
+			return
+		}
+		h.state.AutoDJ.Enabled = f.Enabled
+		if f.Enabled {
+			// Arm a cold start so an idle room starts the set; forget any stale guards.
+			h.coldStartArmed = true
+			h.autoFiredDeck, h.autoFiredItem = "", ""
+		} else {
+			h.coldStartArmed = false
+			h.cancelRotation()
+		}
 		h.touchPersist()
 
 	case "queue.remove":
@@ -213,7 +291,10 @@ func (h *Hub) handleCmd(c *Client, raw []byte) {
 		if !ok {
 			return
 		}
-		h.loadDeck(h.deck(f.Deck), v, 0, now)
+		if h.rotateDeck == f.Deck {
+			h.cancelRotation() // the DJ just filled this deck by hand
+		}
+		h.loadDeck(h.deck(f.Deck), v, nil, now)
 		h.touchPersist()
 
 	case "room.title":
@@ -237,20 +318,16 @@ func (h *Hub) deckCmd(c *Client, d *Deck, f *cmdFrame, now int64) {
 			h.sendTo(c, encode(messageFrame{T: "error", Message: "invalid video"}))
 			return
 		}
-		cueIn := 0.0
-		if f.CueIn != nil {
-			cueIn = *f.CueIn
+		if h.rotateDeck == d.ID {
+			h.cancelRotation() // the DJ just filled this deck by hand
 		}
-		h.loadDeck(d, v, cueIn, now)
+		h.loadDeck(d, v, f.CueIn, now)
 
 	case "deck.eject":
-		d.Video = nil
-		d.Playing = false
-		d.CueIn, d.CueOut = 0, 0
-		d.Loop = false
-		d.BPM = 0
-		d.restamp(now, 0)
-		h.touch()
+		if h.rotateDeck == d.ID {
+			h.cancelRotation()
+		}
+		h.ejectDeck(d, now)
 
 	case "deck.meta":
 		if d.Video == nil || f.DurationSec <= 0 || f.DurationSec > 24*3600 {
@@ -283,6 +360,8 @@ func (h *Hub) deckCmd(c *Client, d *Deck, f *cmdFrame, now int64) {
 		}
 		d.reanchor(now)
 		d.Playing = false
+		// The DJ stopping the music is not an idle room: auto-advance must not restart it.
+		h.coldStartArmed = false
 		h.touch()
 
 	case "deck.seek":
@@ -364,53 +443,91 @@ func (h *Hub) deckCmd(c *Client, d *Deck, f *cmdFrame, now int64) {
 	}
 }
 
-// loadDeck puts v on the deck, parked (not playing) at cueIn. Gain/trim/rate/monitor persist -
-// they belong to the channel, not the track.
-func (h *Hub) loadDeck(d *Deck, v *Video, cueIn float64, now int64) {
+// ejectDeck empties a channel. Gain/trim/rate/monitor survive - they belong to the channel.
+func (h *Hub) ejectDeck(d *Deck, now int64) {
+	if d == nil {
+		return
+	}
+	d.Video = nil
+	d.Playing = false
+	d.CueIn, d.CueOut = 0, 0
+	d.Loop = false
+	d.BPM = 0
+	d.restamp(now, 0)
+	h.touch()
+}
+
+// loadDeck puts v on the deck, parked (not playing) and anchored at its start point. The item's
+// Plan supplies the cue points, so a track the DJ planned lands the same way whether it arrives by
+// hand or by auto-advance; cueInOverride (deck.load's optional cueIn) wins when present.
+// Gain/trim/rate/monitor persist - they belong to the channel, not the track.
+func (h *Hub) loadDeck(d *Deck, v *Video, cueInOverride *float64, now int64) {
 	if d == nil || v == nil {
 		return
 	}
 	d.Video = v
 	d.Playing = false
-	d.CueIn = d.clampToTrack(cueIn)
-	d.CueOut = 0
 	d.Loop = false
+
+	cueIn := v.Plan.CueIn
+	if cueInOverride != nil {
+		cueIn = *cueInOverride
+	}
+	d.CueIn = d.clampToTrack(cueIn)
+	d.CueOut = d.clampToTrack(v.Plan.CueOut)
+	if d.CueOut > 0 && d.CueOut <= d.CueIn {
+		d.CueOut = 0
+	}
 	d.restamp(now, d.CueIn)
 	h.touch()
 }
 
-// fire starts the configured transition toward deck `to` as a declarative automation. The server
-// does not tick the fader; clients interpolate and the flush tick collapses the finished value.
-func (h *Hub) fire(c *Client, to string, now int64) {
+// effectiveTransition resolves a plan's (kind, durationMs) against the mixer defaults. Zero means
+// "inherit", and a cut is instantaneous by definition. Auto-advance uses this to work out its
+// trigger point with exactly the numbers startTransition will use.
+func effectiveTransition(kind string, durationMs int64, m *Mixer) (string, int64) {
+	if !validTransition(kind) {
+		kind = m.TransitionKind
+	}
+	if durationMs <= 0 {
+		durationMs = m.TransitionMs
+	}
+	if kind == "cut" {
+		durationMs = 0
+	}
+	if durationMs < 0 {
+		durationMs = 0
+	}
+	return kind, durationMs
+}
+
+// startTransition runs a transition toward deck `to` as a declarative automation. The server does
+// not tick the fader; clients interpolate and the flush tick collapses the finished value. Pass
+// kind "" / durationMs 0 to use the mixer defaults (what mixer.fire does).
+func (h *Hub) startTransition(to string, kind string, durationMs int64, now int64) {
 	if !validDeck(to) {
-		h.sendTo(c, encode(messageFrame{T: "error", Message: "unknown deck"}))
 		return
 	}
 	m := &h.state.Mixer
-	from := resolvedCrossfade(m, now)
-	target := -1.0
-	if to == "b" {
-		target = 1.0
-	}
+	kind, dur := effectiveTransition(kind, durationMs, m)
 
-	dur := m.TransitionMs
 	curve := "linear"
-	switch m.TransitionKind {
+	switch kind {
 	case "cut":
-		dur = 0
 		curve = "cut"
 	case "crossfade", "bassSwap":
 		curve = "smooth"
 	case "fadeThrough":
 		curve = "linear"
 	}
-	if dur < 0 {
-		dur = 0
-	}
 
+	target := -1.0
+	if to == "b" {
+		target = 1.0
+	}
 	m.Auto = Automation{
 		Active:     true,
-		From:       from,
+		From:       resolvedCrossfade(m, now),
 		To:         target,
 		StartedAt:  now,
 		DurationMs: dur,
@@ -423,6 +540,238 @@ func (h *Hub) fire(c *Client, to string, now int64) {
 		d.Playing = true
 	}
 	h.touch()
+}
+
+// --- auto-advance: the infinite set ----------------------------------------
+//
+// Implements the "Auto-advance" section of PROTOCOL.md. Nothing new goes on the wire: the server
+// simply issues the same mutations the DJ would, on the 50ms flush tick.
+
+// crossfadeGains is the equal-power crossfader curve, mirroring lib/deckmath.ts.
+func crossfadeGains(xf float64) (a, b float64) {
+	t := (clamp(xf, -1, 1) + 1) / 2
+	return math.Cos(t * math.Pi / 2), math.Sin(t * math.Pi / 2)
+}
+
+// contribution is how much of this deck the audience is actually hearing.
+func (d *Deck) contribution(xfGain float64) float64 {
+	return xfGain * clamp(d.Gain, 0, 1) * clamp(d.Trim, 0, 2)
+}
+
+// liveDeck picks the deck the audience is hearing, plus the other ("prepped") side.
+// live == nil means nothing is playing (the caller may cold-start).
+// ok == false means the mix is genuinely ambiguous - two decks contributing equally - in which
+// case auto-advance must keep its hands off.
+func (h *Hub) liveDeck(now int64) (live, prepped *Deck, ok bool) {
+	a, b := h.state.Decks[0], h.state.Decks[1]
+	aOn := a.Playing && a.Video != nil
+	bOn := b.Playing && b.Video != nil
+
+	switch {
+	case !aOn && !bOn:
+		return nil, nil, true
+	case aOn && !bOn:
+		return a, b, true
+	case bOn && !aOn:
+		return b, a, true
+	}
+
+	xf := resolvedCrossfade(&h.state.Mixer, now)
+	ga, gb := crossfadeGains(xf)
+	ca, cb := a.contribution(ga), b.contribution(gb)
+	switch {
+	case math.Abs(ca-cb) < 1e-9:
+		return nil, nil, false // dead centre with matched channels: no answer, so do nothing
+	case ca > cb:
+		return a, b, true
+	default:
+		return b, a, true
+	}
+}
+
+// outPoint is where this deck's track is considered finished. 0 means "unknown".
+func (d *Deck) outPoint() float64 {
+	if d.CueOut > 0 {
+		return d.CueOut
+	}
+	if d.Video != nil {
+		return d.Video.DurationSec // 0 until a browser reports it
+	}
+	return 0
+}
+
+// autoAdvance runs one evaluation of the set. A no-op unless AutoDJ is enabled, so manual
+// behaviour is bit-for-bit unchanged.
+func (h *Hub) autoAdvance(now int64) {
+	if !h.state.AutoDJ.Enabled {
+		return
+	}
+	live, prepped, ok := h.liveDeck(now)
+	if !ok {
+		return
+	}
+	if live == nil {
+		h.coldStart(now) // step 3
+		return
+	}
+	// The set is running, so a cold start is no longer pending.
+	h.coldStartArmed = false
+
+	// Keep the other side loaded: every client should have the next track buffered and anchored
+	// before it is ever audible. This is also what makes a cold start able to transition at all.
+	h.prepNext(prepped, now)
+
+	// Step 1: trigger.
+	if h.state.Mixer.Auto.Active {
+		return // mid-transition; which deck is live is ambiguous and re-firing would slam the fader
+	}
+	if prepped == nil || prepped.Video == nil {
+		return // nothing to bring in - let the live track play out
+	}
+	if live.Video.DurationSec <= 0 {
+		return // no browser has reported a duration, so the out point is unknowable
+	}
+	out := live.outPoint()
+	if out <= 0 {
+		return
+	}
+	kind, dur := effectiveTransition(prepped.Video.Plan.Kind, prepped.Video.Plan.DurationMs, &h.state.Mixer)
+	if live.derived(now) < out-float64(dur)/1000 {
+		return
+	}
+	// Idempotence: the tick runs 20x/sec, so fire at most once per (deck, queue item).
+	if h.autoFiredDeck == live.ID && h.autoFiredItem == live.Video.ID {
+		return
+	}
+	h.autoFiredDeck, h.autoFiredItem = live.ID, live.Video.ID
+
+	h.startTransition(prepped.ID, kind, dur, now)
+	// Step 2 happens when this exact automation completes (see collapseAutomation).
+	h.rotateDeck = live.ID
+	h.rotateAuto = h.state.Mixer.Auto.StartedAt
+	log.Printf("auto-advance: %s -> %s via %s/%dms", live.ID, prepped.ID, kind, dur)
+}
+
+// rotate recycles the deck the set has just faded away from: pause, eject, then hand it the next
+// queue item parked at that item's cue-in. An empty queue simply leaves it ejected.
+func (h *Hub) rotate(now int64) {
+	d := h.deck(h.rotateDeck)
+	h.cancelRotation()
+	if d == nil {
+		return
+	}
+	if d.Playing {
+		d.reanchor(now)
+		d.Playing = false
+	}
+	h.ejectDeck(d, now)
+	h.prepNext(d, now)
+}
+
+// prepNext loads the head of the queue onto an empty deck, paused and anchored at its planned
+// cue-in with its planned cue-out applied.
+func (h *Hub) prepNext(d *Deck, now int64) {
+	if d == nil || d.Video != nil || len(h.state.Queue) == 0 {
+		return
+	}
+	v, taken := h.takeFromQueue(h.state.Queue[0].ID)
+	if !taken {
+		return
+	}
+	h.loadDeck(d, v, nil, now)
+	h.touchPersist()
+}
+
+// coldStart gets a silent room moving: start whatever the DJ already cued up, or else pull the
+// first queue item, and put the crossfader hard over on that deck.
+func (h *Hub) coldStart(now int64) {
+	if !h.coldStartArmed {
+		return // the DJ paused deliberately - do not undo that
+	}
+	target := h.state.Decks[0]
+	if target.Video == nil && h.state.Decks[1].Video != nil {
+		target = h.state.Decks[1] // respect a deck the DJ has already loaded
+	}
+	if target.Video == nil {
+		if len(h.state.Queue) == 0 {
+			return // nothing to play; stay armed until something is queued
+		}
+		h.prepNext(target, now)
+		if target.Video == nil {
+			return
+		}
+	}
+	target.reanchor(now)
+	target.Playing = true
+	m := &h.state.Mixer
+	m.Auto.Active = false
+	m.Crossfade = -1
+	if target.ID == "b" {
+		m.Crossfade = 1
+	}
+	h.coldStartArmed = false
+	h.autoFiredDeck, h.autoFiredItem = "", ""
+	h.touch()
+	log.Printf("auto-advance: cold start on deck %s", target.ID)
+}
+
+// planQueueItem applies a PARTIAL plan update to one queue item. Absent JSON fields are left
+// exactly as they were; the merged result is validated as a whole, and an invalid patch changes
+// nothing at all.
+func (h *Hub) planQueueItem(c *Client, id string, patch *planPatch) {
+	if patch == nil {
+		return
+	}
+	var item *Video
+	for _, v := range h.state.Queue {
+		if v.ID == id {
+			item = v
+			break
+		}
+	}
+	if item == nil {
+		h.sendTo(c, encode(messageFrame{T: "error", Message: "no such queue item"}))
+		return
+	}
+
+	next := item.Plan // start from what is already stored
+	if patch.Kind != nil {
+		if *patch.Kind != "" && !validTransition(*patch.Kind) {
+			h.sendTo(c, encode(messageFrame{T: "error", Message: "unknown transition kind"}))
+			return
+		}
+		next.Kind = *patch.Kind
+	}
+	if patch.DurationMs != nil {
+		d := *patch.DurationMs
+		if d != 0 && (d < minPlanMs || d > maxPlanMs) {
+			h.sendTo(c, encode(messageFrame{T: "error",
+				Message: fmt.Sprintf("plan durationMs must be 0 or %d..%d", minPlanMs, maxPlanMs)}))
+			return
+		}
+		next.DurationMs = d
+	}
+	if patch.CueIn != nil {
+		if *patch.CueIn < 0 || *patch.CueIn > maxTrackSec {
+			h.sendTo(c, encode(messageFrame{T: "error", Message: "plan cueIn out of range"}))
+			return
+		}
+		next.CueIn = *patch.CueIn
+	}
+	if patch.CueOut != nil {
+		if *patch.CueOut < 0 || *patch.CueOut > maxTrackSec {
+			h.sendTo(c, encode(messageFrame{T: "error", Message: "plan cueOut out of range"}))
+			return
+		}
+		next.CueOut = *patch.CueOut
+	}
+	if next.CueOut != 0 && next.CueOut <= next.CueIn {
+		h.sendTo(c, encode(messageFrame{T: "error", Message: "plan cueOut must be 0 or greater than cueIn"}))
+		return
+	}
+
+	item.Plan = next
+	h.touchPersist()
 }
 
 // --- queue helpers ---------------------------------------------------------
@@ -562,8 +911,9 @@ func sanitizeVideo(v *Video, addedBy string) *Video {
 		Title:       sanitizeText(v.Title, 200),
 		Author:      sanitizeText(v.Author, 100),
 		Thumb:       safeThumb(v.Thumb, id),
-		DurationSec: clamp(v.DurationSec, 0, 24*3600),
+		DurationSec: clamp(v.DurationSec, 0, maxTrackSec),
 		AddedBy:     sanitizeText(v.AddedBy, maxNameLen),
+		Plan:        sanitizePlan(v.Plan),
 	}
 	if out.ID == "" {
 		out.ID = newID()
@@ -575,6 +925,28 @@ func sanitizeVideo(v *Video, addedBy string) *Video {
 		out.AddedBy = sanitizeText(addedBy, maxNameLen)
 	}
 	return out
+}
+
+// sanitizePlan clamps a client-supplied Plan instead of rejecting the video over it. Zero values
+// mean "inherit the mixer default", so an unusable field simply falls back to inherit.
+func sanitizePlan(p Plan) Plan {
+	if !validTransition(p.Kind) {
+		p.Kind = ""
+	}
+	if p.DurationMs != 0 {
+		if p.DurationMs < minPlanMs {
+			p.DurationMs = minPlanMs
+		}
+		if p.DurationMs > maxPlanMs {
+			p.DurationMs = maxPlanMs
+		}
+	}
+	p.CueIn = clamp(p.CueIn, 0, maxTrackSec)
+	p.CueOut = clamp(p.CueOut, 0, maxTrackSec)
+	if p.CueOut != 0 && p.CueOut <= p.CueIn {
+		p.CueOut = 0
+	}
+	return p
 }
 
 func safeThumb(u, videoID string) string {

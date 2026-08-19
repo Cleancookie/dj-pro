@@ -139,6 +139,153 @@ const derive = (d, now) => (d.playing ? d.anchorPos + ((now - d.anchorAt) / 1000
   await dj.waitFor((s) => s.queue.length === 0);
   ok('queue.load consumes the queue item', dj.state.decks[1].video?.videoId === VID);
 
+  // ---------------------------------------------------------------- auto-advance (infinite set)
+  // Everything below runs in seconds by giving every queued item a 3s out point and a 1s planned
+  // transition, so a whole rotation takes ~3s instead of a whole track.
+  const plan = (over) => ({ kind: 'crossfade', durationMs: 1000, cueIn: 0, cueOut: 3, ...over });
+  const track = (title, over) => ({ ...vid, id: '', title, plan: plan(over) });
+  const titles = (s) => s.queue.map((v) => v.title);
+
+  // Stand in for the browsers that report a real duration: auto-advance refuses to guess an out
+  // point for a deck whose duration nobody has reported.
+  const browsers = setInterval(() => {
+    const s = dj.state;
+    if (!s || dj.role !== 'dj') return;
+    ['a', 'b'].forEach((deck, i) => {
+      if (s.decks[i].video && s.decks[i].video.durationSec === 0) {
+        dj.cmd({ action: 'deck.meta', deck, durationSec: 212 });
+      }
+    });
+  }, 60);
+
+  // Reset the surface the earlier checks left behind.
+  dj.cmd({ action: 'autodj.set', enabled: false });
+  for (const deck of ['a', 'b']) {
+    dj.cmd({ action: 'deck.pause', deck });
+    dj.cmd({ action: 'deck.eject', deck });
+    dj.cmd({ action: 'deck.rate', deck, rate: 1 });
+  }
+  dj.cmd({ action: 'mixer.crossfade', value: -1 });
+  // Mixer defaults deliberately DIFFERENT from every plan, so any transition that matches the plan
+  // proves the plan was honoured rather than the mixer default.
+  dj.cmd({ action: 'mixer.transition', kind: 'cut', durationMs: 8000 });
+  await dj.waitFor((s) => !s.decks[0].video && !s.decks[1].video && s.queue.length === 0);
+  ok('decks are clear before the auto-advance run', true);
+
+  dj.cmd({ action: 'queue.addMany', videos: [track('A1'), track('A2'), track('A3')] });
+  await dj.waitFor((s) => s.queue.length === 3);
+  ok('queue.addMany preserves order', titles(dj.state).join(',') === 'A1,A2,A3', titles(dj.state).join(','));
+  ok('queue.addMany assigns distinct ids', new Set(dj.state.queue.map((v) => v.id)).size === 3);
+  ok('queue.addMany keeps each item plan', dj.state.queue.every((v) => v.plan.cueOut === 3 && v.plan.durationMs === 1000));
+
+  dj.cmd({ action: 'queue.addMany', videos: [{ ...vid, id: '', videoId: 'nope' }, track('A4')] });
+  await dj.waitFor((s) => s.queue.length === 4);
+  ok('queue.addMany skips unusable rows and keeps the rest', titles(dj.state).join(',') === 'A1,A2,A3,A4');
+  dj.cmd({ action: 'queue.remove', id: dj.state.queue[3].id });
+  await dj.waitFor((s) => s.queue.length === 3);
+
+  // --- queue.plan is a PARTIAL update
+  const planned = dj.state.queue[1].id;
+  dj.cmd({ action: 'queue.plan', id: planned, plan: { kind: 'bassSwap', durationMs: 2000, cueIn: 5, cueOut: 30 } });
+  await dj.waitFor((s) => s.queue[1].plan.kind === 'bassSwap');
+  ok('queue.plan sets a full plan',
+    JSON.stringify(dj.state.queue[1].plan) === JSON.stringify({ kind: 'bassSwap', durationMs: 2000, cueIn: 5, cueOut: 30 }),
+    JSON.stringify(dj.state.queue[1].plan));
+
+  dj.cmd({ action: 'queue.plan', id: planned, plan: { durationMs: 1500 } });
+  await dj.waitFor((s) => s.queue[1].plan.durationMs === 1500);
+  const p2 = dj.state.queue[1].plan;
+  ok('a partial queue.plan does not clobber sibling fields',
+    p2.kind === 'bassSwap' && p2.cueIn === 5 && p2.cueOut === 30, JSON.stringify(p2));
+
+  dj.cmd({ action: 'queue.plan', id: planned, plan: { cueIn: 9 } });
+  await dj.waitFor((s) => s.queue[1].plan.cueIn === 9);
+  const p3 = dj.state.queue[1].plan;
+  ok('a partial queue.plan keeps the other cue point',
+    p3.cueOut === 30 && p3.durationMs === 1500 && p3.kind === 'bassSwap', JSON.stringify(p3));
+
+  dj.cmd({ action: 'queue.plan', id: planned, plan: { durationMs: 10 } });
+  dj.cmd({ action: 'queue.plan', id: planned, plan: { kind: 'nonsense' } });
+  dj.cmd({ action: 'queue.plan', id: planned, plan: { cueOut: 2 } });
+  await sleep(250);
+  const p4 = dj.state.queue[1].plan;
+  ok('an invalid queue.plan patch changes nothing',
+    p4.durationMs === 1500 && p4.kind === 'bassSwap' && p4.cueOut === 30, JSON.stringify(p4));
+
+  // Put item 2 back on the fast schedule for the run.
+  dj.cmd({ action: 'queue.plan', id: planned, plan: { kind: 'crossfade', durationMs: 1000, cueIn: 0, cueOut: 3 } });
+  await dj.waitFor((s) => s.queue[1].plan.cueIn === 0 && s.queue[1].plan.kind === 'crossfade');
+  const ids = dj.state.queue.map((v) => v.id);
+
+  // --- cold start
+  const mark = dj.frames.length;
+  dj.cmd({ action: 'autodj.set', enabled: true });
+  await dj.waitFor((s) => s.decks[0].playing, 4000);
+  ok('autodj.set is reflected in state', dj.state.autoDj.enabled === true);
+  ok('cold start loads the first queue item onto deck A and plays it',
+    dj.state.decks[0].video?.id === ids[0] && dj.state.decks[0].playing === true, dj.state.decks[0].video?.title);
+  ok('cold start puts the crossfader on the live deck', dj.state.mixer.crossfade === -1, 'xf=' + dj.state.mixer.crossfade);
+
+  await dj.waitFor((s) => s.decks[1].video, 3000);
+  ok('the next item is prepped on deck B, paused at its cue-in',
+    dj.state.decks[1].video.id === ids[1] && dj.state.decks[1].playing === false && dj.state.decks[1].anchorPos === 0,
+    JSON.stringify({ id: dj.state.decks[1].video.id, playing: dj.state.decks[1].playing, pos: dj.state.decks[1].anchorPos }));
+  ok('the prepped deck carries the planned out point', dj.state.decks[1].cueOut === 3, 'cueOut=' + dj.state.decks[1].cueOut);
+  ok('prepping consumes the queue item', dj.state.queue.length === 1 && dj.state.queue[0].id === ids[2]);
+
+  // Distinguish an eject-and-reload from a plain load: eject clears BPM, load does not.
+  dj.cmd({ action: 'deck.bpm', deck: 'a', bpm: 128 });
+  await dj.waitFor((s) => s.decks[0].bpm === 128);
+
+  // --- the transition fires by itself near the out point
+  await dj.waitFor((s) => s.mixer.auto.active, 6000);
+  const fired = dj.frames.slice(mark).find((f) => f.t === 'state' && f.state.mixer.auto.active);
+  const au2 = fired.state.mixer.auto;
+  const outgoing = fired.state.decks[0];
+  const posAtFire = outgoing.anchorPos + ((au2.startedAt - outgoing.anchorAt) / 1000) * outgoing.rateActual;
+  ok('auto-advance fires near the out point (3s out, 1s transition -> ~2.0s)',
+    Math.abs(posAtFire - 2) < 0.35, `pos=${posAtFire.toFixed(3)}s`);
+  ok('auto-advance uses the incoming item plan, not the mixer default',
+    au2.durationMs === 1000 && au2.curve === 'smooth' && au2.to === 1, JSON.stringify(au2));
+  ok('the incoming deck is started by the transition',
+    fired.state.decks[1].playing === true, JSON.stringify({ playing: fired.state.decks[1].playing }));
+
+  // --- rotation
+  await dj.waitFor((s) => s.decks[0].video?.id === ids[2], 6000);
+  const rotA = dj.state.decks[0];
+  ok('the outgoing deck is reloaded with the next queue item, paused at its cue-in',
+    rotA.playing === false && rotA.anchorPos === 0 && rotA.cueOut === 3,
+    JSON.stringify({ playing: rotA.playing, pos: rotA.anchorPos, cueOut: rotA.cueOut }));
+  ok('the outgoing deck was ejected first (channel BPM cleared)', rotA.bpm === 0, 'bpm=' + rotA.bpm);
+  ok('the queue has rotated empty', dj.state.queue.length === 0);
+  ok('the incoming deck is now the live one', dj.state.decks[1].playing === true && dj.state.mixer.crossfade === 1,
+    'xf=' + dj.state.mixer.crossfade);
+
+  // --- no double fire: exactly ONE automation for that rotation, despite a 20Hz tick
+  const cycle = dj.frames.slice(mark, dj.frames.findIndex((f, i) => i >= mark && f.t === 'state' && f.state.decks[0].video?.id === ids[2]) + 1);
+  const starts = [...new Set(cycle.filter((f) => f.t === 'state' && f.state.mixer.auto.active).map((f) => f.state.mixer.auto.startedAt))];
+  ok('auto-advance fires exactly once per track', starts.length === 1, starts.length + ' automation(s): ' + starts.join(','));
+
+  // --- an empty queue just stops: the last track plays out and the spare deck stays ejected
+  await dj.waitFor((s) => s.decks[1].video === null, 8000);
+  ok('with an empty queue the outgoing deck is left ejected', dj.state.decks[1].video === null);
+  ok('the last track keeps playing', dj.state.decks[0].playing === true && dj.state.decks[0].video?.id === ids[2]);
+
+  // --- inert when disabled
+  dj.cmd({ action: 'autodj.set', enabled: false });
+  await dj.waitFor((s) => s.autoDj.enabled === false);
+  dj.cmd({ action: 'queue.addMany', videos: [track('Z1')] });
+  await dj.waitFor((s) => s.queue.length === 1);
+  dj.cmd({ action: 'deck.cueOut', deck: 'a', sec: 1 });
+  dj.cmd({ action: 'deck.seek', deck: 'a', positionSec: 0.9 });
+  await sleep(1300);
+  ok('auto-advance is inert while disabled',
+    dj.state.mixer.auto.active === false && dj.state.queue.length === 1 && dj.state.decks[1].video === null,
+    JSON.stringify({ auto: dj.state.mixer.auto.active, queue: dj.state.queue.length, deckB: dj.state.decks[1].video }));
+  clearInterval(browsers);
+  dj.cmd({ action: 'queue.remove', id: dj.state.queue[0].id });
+  await sleep(120);
+
   const dj2 = new Client('dj2'); await dj2.open();
   dj2.send({ t: 'auth', password: PASS });
   await sleep(250);

@@ -19,7 +19,9 @@ const (
 	pongWait   = 60 * time.Second
 	pingPeriod = 25 * time.Second
 
-	readLimit = 4 << 10 // 4KB
+	// 32KB: a queue.addMany carrying a pasted playlist is the largest legitimate frame, and
+	// gorilla drops the socket rather than truncating when a frame exceeds this.
+	readLimit = 32 << 10
 
 	// msgRate is the sustained per-socket message allowance; msgBurst absorbs UI flurries
 	// (a dragged crossfader). Exceed it and the socket is dropped.

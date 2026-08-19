@@ -12,24 +12,28 @@ import (
 
 const snapshotFile = "room.json"
 
-// Snapshot is the durable slice of the room: what to play and what the room is called. Deck
-// anchors, listeners and chat are intentionally not persisted - they are meaningless across a
-// restart, and reviving a stale playhead would desync everyone.
+// Snapshot is the durable slice of the room: what to play, how each item is planned to mix in,
+// whether the set runs itself, and what the room is called. Deck anchors, listeners and chat are
+// intentionally not persisted - they are meaningless across a restart, and reviving a stale
+// playhead would desync everyone. A planned set, on the other hand, is exactly the thing worth
+// keeping: the Plans ride along inside each queued Video.
 type Snapshot struct {
 	Version int      `json:"version"`
 	Title   string   `json:"title"`
 	Queue   []*Video `json:"queue"`
+	AutoDJ  bool     `json:"autoDj"`
 	SavedAt int64    `json:"savedAt"`
 }
 
 func snapshotOf(s *RoomState) Snapshot {
-	return Snapshot{Version: 1, Title: s.Title, Queue: s.Queue, SavedAt: nowMs()}
+	return Snapshot{Version: 1, Title: s.Title, Queue: s.Queue, AutoDJ: s.AutoDJ.Enabled, SavedAt: nowMs()}
 }
 
 func (snap *Snapshot) applyTo(s *RoomState) {
 	if t := sanitizeText(snap.Title, maxTitleLen); t != "" {
 		s.Title = t
 	}
+	s.AutoDJ.Enabled = snap.AutoDJ
 	q := make([]*Video, 0, len(snap.Queue))
 	for _, v := range snap.Queue {
 		if len(q) >= maxQueueLen {

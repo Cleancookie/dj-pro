@@ -36,7 +36,23 @@ type Hub struct {
 	done chan struct{}
 
 	dirty        bool // state changed, needs a broadcast on the next flush tick
-	persistDirty bool // queue/title changed, needs a snapshot
+	persistDirty bool // queue/title/plan/autoDj changed, needs a snapshot
+
+	// Auto-advance bookkeeping, all owned by the hub goroutine.
+	//
+	// autoFiredDeck/autoFiredItem are the idempotence guard: the tick runs 20x/sec, so without
+	// remembering which track we already fired for we would slam the crossfader back and forth.
+	// The queue-entry id is used rather than the YouTube id because the same video may legitimately
+	// sit on both decks.
+	autoFiredDeck string
+	autoFiredItem string
+	// rotateDeck is the outgoing deck waiting for its automation to finish so it can be recycled;
+	// rotateAuto pins WHICH automation, so a manual fire or crossfade cannot make us rotate.
+	rotateDeck string
+	rotateAuto int64
+	// coldStartArmed is set when auto-advance is switched on and cleared once the set is running or
+	// the DJ pauses. It is what stops a manual pause from being instantly undone by a cold start.
+	coldStartArmed bool
 }
 
 func NewHub(cfg *Config, store *Store) *Hub {
@@ -57,9 +73,12 @@ func NewHub(cfg *Config, store *Store) *Hub {
 			log.Printf("restore: %v", err)
 		} else if snap != nil {
 			snap.applyTo(h.state)
-			log.Printf("restored %d queue item(s), title %q", len(h.state.Queue), h.state.Title)
+			log.Printf("restored %d queue item(s), title %q, autoDj=%v",
+				len(h.state.Queue), h.state.Title, h.state.AutoDJ.Enabled)
 		}
 	}
+	// A planned set survives a restart, so a room that was running itself picks up where it left off.
+	h.coldStartArmed = h.state.AutoDJ.Enabled
 	return h
 }
 
@@ -88,7 +107,9 @@ func (h *Hub) Run(ctx context.Context) {
 		case fn := <-h.ops:
 			fn(h)
 		case <-flush.C:
-			h.collapseAutomation(nowMs())
+			now := nowMs()
+			h.collapseAutomation(now) // may complete a transition and rotate the decks
+			h.autoAdvance(now)        // may start the next transition
 			if h.dirty {
 				h.flush()
 			}
@@ -311,10 +332,23 @@ func (h *Hub) collapseAutomation(now int64) {
 		return
 	}
 	if now-a.StartedAt >= a.DurationMs {
+		startedAt := a.StartedAt
 		a.Active = false
 		h.state.Mixer.Crossfade = clamp(a.To, -1, 1)
 		h.touch()
+		// Step 2 of auto-advance: the transition this deck was faded out by has finished, so the
+		// outgoing deck can be recycled into the prepped deck. Only for the exact automation
+		// auto-advance started - a manual fire in between leaves the rotation cancelled.
+		if h.rotateDeck != "" && h.rotateAuto == startedAt {
+			h.rotate(now)
+		}
 	}
+}
+
+// cancelRotation drops a pending deck rotation. Any manual move by the DJ that touches the
+// outgoing deck, or that redirects the crossfader, wins over a queued rotation.
+func (h *Hub) cancelRotation() {
+	h.rotateDeck, h.rotateAuto = "", 0
 }
 
 // --- persistence -----------------------------------------------------------
