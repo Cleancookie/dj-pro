@@ -4,7 +4,7 @@ import { cmd, useDeck, useMixer, useRole, useStatus } from '../lib/store';
 import { conn } from '../lib/ws';
 import { clock } from '../lib/clock';
 import { deckPosition, mainGain } from '../lib/deckmath';
-import { useEngine } from '../lib/engine';
+import { useAudioGate, useEngine } from '../lib/engine';
 import { DeckPanel } from '../components/dj/DeckPanel';
 import { TopBar } from '../components/dj/TopBar';
 import { MixerColumn } from '../components/dj/MixerColumn';
@@ -64,6 +64,7 @@ function LoginCard({ onAuthed }: { onAuthed: () => Promise<void> | void }) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const gate = useAudioGate();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -79,6 +80,10 @@ function LoginCard({ onAuthed }: { onAuthed: () => Promise<void> | void }) {
 
   const submit = async () => {
     if (!password || busy) return;
+    // The submit click is the booth's only guaranteed user gesture, and the
+    // engine keeps every deck muted until the gate is opened. Do it here,
+    // synchronously, before any await — otherwise the DJ hears nothing.
+    gate.unlock();
     setBusy(true);
     setError(null);
     try {
