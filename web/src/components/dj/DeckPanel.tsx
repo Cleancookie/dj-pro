@@ -8,7 +8,6 @@ import { clock } from '../../lib/clock';
 import { TapTempo } from '../../lib/bpm';
 import { JogWheel } from './JogWheel';
 import { PitchFader } from './PitchFader';
-import { Timeline } from './Timeline';
 import { Transport } from './Transport';
 import './DeckPanel.css';
 
@@ -140,7 +139,7 @@ export function DeckPanel({ id }: { id: DeckId }) {
         </button>
       </header>
 
-      {/* ---------- video preview ---------- */}
+      {/* ---------- video preview (reference only — the waveforms are downstairs) ---------- */}
       <div className={'dk-screen' + (silent ? ' is-silent' : '') + (video ? '' : ' is-empty')}>
         <div className="dk-frame">
           {/* the engine mounts the YouTube iframe here; it must never receive clicks */}
@@ -171,9 +170,6 @@ export function DeckPanel({ id }: { id: DeckId }) {
           {video ? <TimeOverlay id={id} durationSec={dur} /> : null}
         </div>
       </div>
-
-      {/* ---------- timeline ---------- */}
-      <Timeline id={id} />
 
       {/* ---------- jog + right stack ---------- */}
       <div className="dk-mid">
