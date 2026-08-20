@@ -15,8 +15,12 @@ information density. It should look like professional equipment, not a website w
    `box-shadow: 0 0 0 1px var(--deck), 0 0 12px var(--deck-glow)` — never by changing layout size.
 5. **Labels are 9-10px, uppercase, `letter-spacing: .09em`, `color: var(--ink-3)`.** Values are
    larger and brighter than their labels. This one rule carries most of the "pro gear" feel.
-6. **No page scroll in the booth.** The DJ view fills the viewport exactly; only the crate, requests, chat
-   and library lists scroll internally. `min-width: 1240px` for the booth is acceptable.
+6. **No page scroll in the booth**, at the sizes it is built for. The DJ view fills the viewport
+   exactly and only the crate, requests, chat and library lists scroll internally. The booth's own
+   minimum is `1320px` wide (the column template's own sum) by `788px` tall (the top bar, the deck
+   row and one usable pair of wave lanes); below either, the page scrolls and the corner hint says
+   so. Scrolling to reach a control is a poor experience — a control silently sliced off the bottom
+   is a worse one.
 7. **Motion is functional and fast** (`--fast`/`--med`): value changes, hover states, engaged
    glows. Nothing bounces, nothing eases in over 200ms. The jog wheel and playhead are the only
    continuously animated things.
@@ -39,29 +43,39 @@ information density. It should look like professional equipment, not a website w
 │ ▣ DJ PRO   room title (editable)   ● LIVE   ♫ 12 listening   [master meter]  ⚙   │
 ├──────────────────────┬────────────────┬──────────────────────┬───────────────────┤
 │  DeckPanel A         │  MixerColumn   │  DeckPanel B         │  LibraryBar       │
-│  (flex 1, min 380px) │  200px fixed   │  (flex 1, min 380px) │  paste a URL,     │
-│                      │                │                      │  results as cards │
+│  small video, jog,   │  200px fixed   │  small video, jog,   │  paste a URL,     │
+│  BPM, pitch, transport  (≤592px tall) │  BPM, pitch, transport  results as cards │
 │                      │                │                      ├───────────────────┤
-│                      │                │                      │  SidePanel        │
-│                      │                │                      │  340px fixed      │
-│                      │                │                      │  crate / requests │
-│                      │                │                      │  / chat / crowd   │
-└──────────────────────┴────────────────┴──────────────────────┴───────────────────┘
+├──────────────────────┴────────────────┴──────────────────────┤  SidePanel        │
+│  WaveStack — deck A's waveform stacked directly on deck B's,  │  340px fixed      │
+│  sharing one width so the two beat grids land on the same     │  crate / requests │
+│  pixel column. This is where the DJ's eyes live.              │  / chat / crowd   │
+└───────────────────────────────────────────────────────────────┴───────────────────┘
 ```
+The video is a reference thumbnail, not the show: the waveforms are the instrument, so the deck
+row is capped at what its controls and the mixer column actually need and every remaining pixel
+goes to the lanes. When you add a mixer section, re-measure that cap — the mixer must never scroll,
+because a FIRE button below the fold is a control that does not exist during a mix.
 
 ## DeckPanel internals, top to bottom
 1. **Header** — deck letter badge (filled `var(--deck)`), title + author (truncate), eject.
 2. **Video preview** 16:9, `border-radius: var(--r)`, overlaid bottom-left with elapsed timecode
    and bottom-right with `-remaining`. Dim to 55% brightness when the deck's main gain is ~0 so
    the DJ can see at a glance which deck the audience is hearing.
-3. **Waveform timeline** — pseudo-waveform bars (`waveformBars`), beat grid ticks from the BPM,
-   IN/OUT markers with draggable handles, a playhead, played-vs-unplayed colouring. Click to seek,
-   drag to scrub (call `setScrub(id, true/false)` around the drag).
-4. **Jog wheel + right stack** — 148px platter that rotates with playback (`transform: rotate()`
+3. **Jog wheel + right stack** — 148px platter that rotates with playback (`transform: rotate()`
    driven by position × rate); drag it to nudge (pitch bend). Right stack: big BPM readout with
    effective BPM under it, TAP, SYNC, and a vertical pitch fader showing `±x.x%`.
-5. **Transport row** — CUE (headphone monitor), ⏮ start, PLAY/PAUSE (largest, glows when playing),
+4. **Transport row** — CUE (headphone monitor), ⏮ start, PLAY/PAUSE (largest, glows when playing),
    IN, OUT, LOOP.
+
+## WaveStack internals (the timeline lives here, not in the deck)
+Each lane is a rail (deck letter, effective BPM) plus a `Timeline` canvas: pseudo-waveform bars
+(`waveformBars`), a beat grid drawn from the BPM and anchored at `deck.beatOffset`, bar numbers,
+IN/OUT markers with draggable handles, played-vs-unplayed colouring, and a playhead fixed at the
+centre with the track scrolling past it. Click to seek, drag to scrub (call `setScrub(id, true/false)`
+around the drag), drag the bar ruler to slide the grid. The window is a fixed number of seconds
+(4/8/16/32, or fit) rather than the whole track, because a beat has to be the same width in both
+lanes for stacking them to mean anything.
 
 ## MixerColumn, top to bottom
 CUE MIX + headphone level → EQ kill grid (LOW/MID/HIGH per channel) → two vertical channel faders

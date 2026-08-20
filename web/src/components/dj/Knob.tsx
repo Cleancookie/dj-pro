@@ -75,6 +75,7 @@ export function Knob({ value, min, max, onChange, label, size = 42, format }: Kn
     // The middle button re-centres the knob rather than turning it, so it must not take capture.
     if (e.button === 1) {
       e.preventDefault();
+      ref.current?.focus(); // the same control a left click would have left focused
       jump((min + max) / 2);
       return;
     }
@@ -146,7 +147,12 @@ export function Knob({ value, min, max, onChange, label, size = 42, format }: Kn
   const text = fmt(shown);
 
   return (
-    <div className={`knob${drag !== null ? ' is-dragging' : ''}`} style={{ '--knob-size': `${size}px` } as React.CSSProperties}>
+    <div
+      className={`knob${drag !== null ? ' is-dragging' : ''}`}
+      style={{ '--knob-size': `${size}px` } as React.CSSProperties}
+      onMouseDown={swallowMiddle}
+      onAuxClick={swallowMiddle}
+    >
       <div
         ref={ref}
         className="knob-dial"

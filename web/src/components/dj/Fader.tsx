@@ -155,7 +155,9 @@ export function Fader({
     // has no home to go to — better to do nothing than to invent one.
     if (e.button === 1) {
       e.preventDefault();
-      if (detent !== undefined) jump(detent);
+      if (detent === undefined) return;
+      trackRef.current?.focus(); // the same control a left click would have left focused
+      jump(detent);
       return;
     }
     e.preventDefault();
@@ -248,6 +250,8 @@ export function Fader({
     <div
       className={`fader fader-${orientation}${disabled ? ' is-disabled' : ''}${drag !== null ? ' is-dragging' : ''}`}
       style={{ '--fader-accent': accent ?? 'var(--deck, var(--a))' } as React.CSSProperties}
+      onMouseDown={swallowMiddle}
+      onAuxClick={swallowMiddle}
     >
       <div className="fader-head">
         <span className="fader-label">{label}</span>

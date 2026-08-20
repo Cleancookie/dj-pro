@@ -28,6 +28,8 @@
   --warn: #fbbf24;
   --hot: #f43f5e;
   --cue: #c084fc;
+  /* Behind a label that sits over artwork or a waveform, so the text stays readable. */
+  --scrim: rgba(0, 0, 0, 0.55);
 
   /* ---- geometry ---- */
   --r-sm: 4px;

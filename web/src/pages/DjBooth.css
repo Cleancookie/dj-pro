@@ -1,11 +1,10 @@
 /* ------------------------------------------------------------- booth layout */
 .booth-page {
   height: 100dvh;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
 }
 .booth {
-  min-width: 1300px;
+  min-width: 1320px;
   height: 100%;
   display: grid;
   grid-template-columns: minmax(390px, 1fr) 200px minmax(390px, 1fr) 340px;
@@ -19,6 +18,9 @@
      their natural height back and costs the waveforms ~40px, which is the wrong trade. If you add
      a mixer section, measure the column again and move this number. */
   grid-template-rows: 56px minmax(0, 592px) minmax(140px, 1fr);
+  /* 56 + the deck row + a usable pair of lanes. Below this the page scrolls instead of silently
+     slicing the bottom off the mixer — an unreachable MASTER OUT is worse than a scrollbar. */
+  min-height: 788px;
   grid-template-areas:
     'top top top  top'
     'da  mx  db   side'
@@ -88,7 +90,7 @@
   border-radius: 99px;
   box-shadow: var(--sh-2);
 }
-@media (max-width: 1299px) {
+@media (max-width: 1319px), (max-height: 787px) {
   .booth-narrow {
     display: block;
   }

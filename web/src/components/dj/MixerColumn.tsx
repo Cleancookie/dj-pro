@@ -42,12 +42,22 @@ export function fmtDur(ms: number): string {
 const KILL_APPROX =
   'Approximated. YouTube exposes no audio graph, so an EQ kill is applied as level attenuation — there is no real filtering.';
 
-function Head({ label, chip, chipTitle }: { label: string; chip?: string; chipTitle?: string }) {
+function Head({
+  label,
+  chip,
+  chipTitle,
+  chipClass,
+}: {
+  label: string;
+  chip?: string;
+  chipTitle?: string;
+  chipClass?: string;
+}) {
   return (
     <div className="mx-head">
       <span className="mx-head-label">{label}</span>
       {chip && (
-        <span className="mx-chip" title={chipTitle}>
+        <span className={`mx-chip${chipClass ? ` ${chipClass}` : ''}`} title={chipTitle}>
           {chip}
         </span>
       )}
@@ -344,16 +354,19 @@ function TransitionBlock() {
 
   return (
     <div className="mx-sec mx-trans">
+      {/* Auto-advance says so in the head rather than in a banner of its own: a section that grows
+          when the server takes over pushes MASTER OUT off the bottom of the column, and it does it
+          in exactly the mode where the DJ is most likely to be reaching for the master. */}
       <Head
         label="Transition"
-        chip="DEFAULT"
-        chipTitle="Queue items without a plan of their own inherit this kind and duration."
+        chip={autoDj ? 'AUTO' : 'DEFAULT'}
+        chipClass={autoDj ? 'is-auto' : undefined}
+        chipTitle={
+          autoDj
+            ? 'Auto-advance is driving — the server fires these transitions for you. Firing manually still works and takes effect immediately.'
+            : 'Queue items without a plan of their own inherit this kind and duration.'
+        }
       />
-      {autoDj && (
-        <p className="mx-autohint" title="Auto-advance is enabled — the server fires these transitions for you. Firing manually still works and takes effect immediately.">
-          Auto-advance is driving
-        </p>
-      )}
       <div className="mx-kinds" role="group" aria-label="Transition type">
         {KINDS.map((k) => (
           <button

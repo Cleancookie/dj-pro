@@ -401,7 +401,7 @@ export function DjBooth() {
           </div>
         </div>
       </div>
-      <p className="booth-narrow">Best on a wide screen — scroll sideways to reach the rest of the booth.</p>
+      <p className="booth-narrow">Best on a big screen — scroll to reach the rest of the booth.</p>
       {showKeys && <ShortcutOverlay onClose={() => setShowKeys(false)} />}
     </>
   );

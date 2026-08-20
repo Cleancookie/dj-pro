@@ -31,7 +31,7 @@ function Lane({ id, focused }: { id: DeckId; focused: boolean }) {
   const cls = 'ws-lane slot-' + id + ' deck-' + id + (focused ? ' is-focused' : '');
 
   return (
-    <div className={cls} aria-label={'Deck ' + id.toUpperCase() + ' waveform'}>
+    <div className={cls} role="group" aria-label={'Deck ' + id.toUpperCase() + ' waveform'}>
       <div className="ws-rail">
         <span className="ws-letter">{id.toUpperCase()}</span>
         <span className="ws-bpm num" title="Effective BPM after pitch — line these up to beatmatch">
@@ -40,9 +40,13 @@ function Lane({ id, focused }: { id: DeckId; focused: boolean }) {
       </div>
       <div className="ws-wave">
         <Timeline id={id} />
-        <span className="ws-name" title={title ?? 'No track loaded'}>
-          {title ?? 'NO TRACK'}
-        </span>
+        {/* Only when there is one: the timeline paints its own "no track" plate, and two of them
+            40px apart reads as a rendering fault rather than an empty state. */}
+        {title && (
+          <span className="ws-name" title={title}>
+            {title}
+          </span>
+        )}
       </div>
     </div>
   );
