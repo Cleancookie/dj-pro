@@ -1,0 +1,98 @@
+.ws {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 5px;
+}
+
+.ws-lane {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 4px 5px 4px 4px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--deck-dim);
+  border-radius: var(--r);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  box-shadow: var(--bevel);
+  transition: border-color var(--fast), box-shadow var(--fast);
+}
+
+.ws-lane.is-focused {
+  border-left-color: var(--deck);
+  box-shadow: var(--bevel), 0 0 14px -6px var(--deck-glow);
+}
+
+/* ------------------------------------------------------------------- rail */
+
+.ws-rail {
+  flex: 0 0 auto;
+  width: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.ws-letter {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  background: var(--deck);
+  color: var(--bg);
+  font: 700 13px/1 var(--ui);
+  box-shadow: 0 0 10px var(--deck-glow);
+}
+
+.ws-bpm {
+  font-size: 10px;
+  color: var(--deck);
+  opacity: 0.85;
+  cursor: help;
+}
+
+/* ------------------------------------------------------------------- wave */
+
+.ws-wave {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+
+/* The Timeline sizes itself from its flex parent. Both minimums are released so a short
+   booth screen squeezes the lanes rather than pushing the mixer's bottom controls away. */
+.ws-wave .tl {
+  min-width: 0;
+  min-height: 0;
+}
+
+.ws-wave .tl-canvas-wrap {
+  min-height: 0;
+}
+
+/* the track name rides in the corner of the lane so the rail stays narrow */
+.ws-name {
+  position: absolute;
+  right: 6px;
+  top: 4px;
+  max-width: 46%;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}

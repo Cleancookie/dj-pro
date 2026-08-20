@@ -9,6 +9,7 @@ import { DeckPanel } from '../components/dj/DeckPanel';
 import { TopBar } from '../components/dj/TopBar';
 import { MixerColumn } from '../components/dj/MixerColumn';
 import { SidePanel } from '../components/dj/SidePanel';
+import { WaveStack } from '../components/dj/WaveStack';
 import './DjBooth.css';
 
 /* ------------------------------------------------------------------ helpers */
@@ -248,6 +249,8 @@ export function DjBooth() {
   useEffect(() => {
     const root = rootRef.current;
     if (!authed || !root) return;
+    // Both the deck panels and the wave stack's lanes carry the .slot-a / .slot-b marker,
+    // so touching either one hands the cue keys to that deck.
     const pick = (e: Event) => {
       const t = e.target as Element | null;
       if (!t || typeof t.closest !== 'function') return;
@@ -389,6 +392,9 @@ export function DjBooth() {
           </div>
           <div className={`booth-slot slot-b deck-b${focus === 'b' ? ' is-focused' : ''}`}>
             <DeckPanel id="b" />
+          </div>
+          <div className="booth-waves">
+            <WaveStack focus={focus} />
           </div>
           <div className="booth-side">
             <SidePanel />
