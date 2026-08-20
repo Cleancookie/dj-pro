@@ -20,6 +20,16 @@ const SWEEP = 270;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
+/**
+ * The middle button re-centres the knob, so the browser must not also treat it as a request to
+ * autoscroll. It is the *mousedown* that raises the autoscroll ring — by the time `auxclick`
+ * runs the ring is up and the page has begun to drift — and cancelling it likewise stops an X11
+ * primary selection being pasted out from under the knob.
+ */
+function swallowMiddle(e: { button: number; preventDefault: () => void }) {
+  if (e.button === 1) e.preventDefault();
+}
+
 function polar(cx: number, cy: number, r: number, deg: number) {
   const rad = (deg * Math.PI) / 180;
   return [cx + r * Math.sin(rad), cy - r * Math.cos(rad)] as const;
@@ -62,6 +72,12 @@ export function Knob({ value, min, max, onChange, label, size = 42, format }: Kn
   );
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // The middle button re-centres the knob rather than turning it, so it must not take capture.
+    if (e.button === 1) {
+      e.preventDefault();
+      jump((min + max) / 2);
+      return;
+    }
     e.preventDefault();
     ref.current?.focus();
     grab.current = { id: e.pointerId, y: e.clientY, from: shown };
@@ -142,11 +158,13 @@ export function Knob({ value, min, max, onChange, label, size = 42, format }: Kn
         aria-valuemax={max}
         aria-valuenow={Number(shown.toFixed(4))}
         aria-valuetext={text}
-        title={`${label} — ${text} · drag up/down, double-click to centre`}
+        title={`${label} — ${text} · drag up/down, middle-click or double-click to centre`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onMouseDown={swallowMiddle}
+        onAuxClick={swallowMiddle}
         onKeyDown={onKeyDown}
         onDoubleClick={() => jump((min + max) / 2)}
       >

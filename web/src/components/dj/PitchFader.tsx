@@ -13,6 +13,15 @@ const SEND_MS = 34; // ~30 msgs/sec
 const FINE = 10;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+/**
+ * The middle button drops the pitch home, so the browser must not also treat it as a request to
+ * autoscroll. It is the *mousedown* that raises the autoscroll ring — by the time `auxclick` runs
+ * the ring is up and the page has begun to drift — and cancelling it likewise stops an X11
+ * primary selection being pasted out from under the fader.
+ */
+const swallowMiddle = (e: { button: number; preventDefault: () => void }) => {
+  if (e.button === 1) e.preventDefault();
+};
 const pctText = (rate: number) => {
   const p = (rate - 1) * 100;
   return (p > 0 ? '+' : p < 0 ? '' : '±') + p.toFixed(2);
@@ -130,6 +139,13 @@ export function PitchFader({ id }: { id: DeckId }) {
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    // Middle button drops the pitch back to 0.00%, through the same path as Home and a
+    // double-click so that the requested rate held here stays in step with the server.
+    if (e.button === 1) {
+      e.preventDefault();
+      reset();
+      return;
+    }
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { pointerId: e.pointerId, y: e.clientY, rate: wanted(), fine: e.shiftKey };
@@ -212,6 +228,8 @@ export function PitchFader({ id }: { id: DeckId }) {
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
+          onMouseDown={swallowMiddle}
+          onAuxClick={swallowMiddle}
           onDoubleClick={reset}
           onKeyDown={onKeyDown}
           role="slider"
@@ -222,7 +240,7 @@ export function PitchFader({ id }: { id: DeckId }) {
           aria-valuenow={shown}
           aria-valuetext={pctText(shown) + '%'}
           aria-orientation="vertical"
-          title="Drag to pitch · hold Shift for a 10× finer drag · double-click or Home to reset · arrow keys nudge (shift = 0.05%)"
+          title="Drag to pitch · hold Shift for a 10× finer drag · middle-click, double-click or Home to reset · arrow keys nudge (shift = 0.05%)"
         >
           <div className="pf-detent" />
           <div className="pf-cap" style={{ transform: 'translateY(' + capY + 'px)' }}>
