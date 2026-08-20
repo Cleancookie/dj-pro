@@ -1,7 +1,7 @@
 .tl {
   position: relative;
   flex: 1 1 auto;
-  min-height: 78px;
+  min-height: 56px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
@@ -14,7 +14,7 @@
 .tl-canvas-wrap {
   position: relative;
   flex: 1 1 auto;
-  min-height: 70px;
+  min-height: 48px;
   border-radius: var(--r-sm);
   overflow: hidden;
   cursor: ew-resize;
@@ -50,4 +50,74 @@
   opacity: 0;
   transition: opacity var(--fast);
   white-space: nowrap;
+}
+
+/* The bar-number gutter along the bottom doubles as the beat grid's handle: drag it sideways
+   and the whole grid slides, which is how a downbeat gets nudged onto the beat by ear. */
+.tl-ruler {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  height: 14px;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+}
+
+.tl-ruler:hover { background: rgba(255, 255, 255, 0.03); }
+.tl-ruler.is-idle { cursor: default; }
+.tl-ruler.is-idle:hover { background: none; }
+
+/* Sits over the canvas rather than beside it: the lane is short and wide, and every pixel of
+   height belongs to the waveform. */
+.tl-tools {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  display: flex;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.tl-zoom {
+  pointer-events: auto;
+  min-width: 20px;
+  padding: 1px 4px;
+  font-family: var(--mono);
+  font-size: 8px;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast), background var(--fast);
+}
+
+.tl-zoom:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink-4);
+}
+
+.tl-zoom.is-on {
+  color: var(--deck, var(--a));
+  border-color: var(--deck, var(--a));
+}
+
+.tl-set1 {
+  margin-left: 4px;
+  color: var(--cue);
+  border-color: var(--line-2);
+}
+
+.tl-zoom:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tl-zoom:focus-visible {
+  outline: 1px solid var(--deck, var(--a));
+  outline-offset: 1px;
 }

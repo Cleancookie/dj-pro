@@ -53,7 +53,10 @@ type Deck struct {
 	CueIn      float64 `json:"cueIn"`
 	CueOut     float64 `json:"cueOut"` // 0 == none
 	Loop       bool    `json:"loop"`
-	BPM        float64 `json:"bpm"`     // source BPM as tapped/entered by the DJ
+	BPM        float64 `json:"bpm"` // source BPM as tapped/entered by the DJ
+	// Seconds from the start of the file to the first downbeat. Almost no track starts exactly on
+	// beat 1, so without this the beat grid is drawn in the wrong place however right the BPM is.
+	BeatOffset float64 `json:"beatOffset"`
 	Monitor    bool    `json:"monitor"` // DJ headphone cue
 	KillLow    bool    `json:"killLow"`
 	KillMid    bool    `json:"killMid"`

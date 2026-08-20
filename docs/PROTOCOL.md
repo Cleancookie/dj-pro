@@ -64,6 +64,7 @@ deck.cueIn       { deck, sec }
 deck.cueOut      { deck, sec }
 deck.loop        { deck, on }                 // loop between in/out
 deck.bpm         { deck, bpm }
+deck.beatOffset  { deck, sec }                // where the first downbeat falls; anchors the beat grid
 deck.sync        { deck }                     // match this deck's bpm to the other deck
 deck.monitor     { deck, on }                 // DJ-local cue; broadcast so DJ UI is multi-tab safe
 mixer.crossfade  { value }                    // -1 (full A) .. 1 (full B)

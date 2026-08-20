@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { DeckId } from '../../lib/protocol';
-import { cmd, useDeck } from '../../lib/store';
+import { cmd, useDeck, useRoom } from '../../lib/store';
 import { setScrub, usePlayhead } from '../../lib/engine';
-import { beatGrid, fmtTime } from '../../lib/deckmath';
-import { waveformBars } from '../../lib/waveform';
+import { beatWindow, fmtTime, fmtTimeMs } from '../../lib/deckmath';
+import { barCountFor, waveformBars } from '../../lib/waveform';
 import './Timeline.css';
 
 /* ------------------------------------------------------------------ helpers */
@@ -49,6 +49,40 @@ function throttled<T extends unknown[]>(ms: number, fn: (...a: T) => void) {
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
+/* ------------------------------------------------------------------- zoom */
+
+/**
+ * The window, in seconds of audio across the panel. A fixed window is the whole point of a
+ * beatmatching waveform: a beat is the same number of pixels wide whatever the track's length,
+ * so two stacked timelines can be compared by eye. 16s is roughly eight bars at 128bpm.
+ * 'fit' squeezes the whole track in, which is only useful for finding your way around it.
+ */
+type Zoom = number | 'fit';
+const ZOOMS: readonly number[] = [4, 8, 16, 32];
+const DEFAULT_ZOOM = 16;
+const ZOOM_KEY = 'djpro.timeline.zoom';
+
+function loadZoom(id: DeckId): Zoom {
+  try {
+    const raw = localStorage.getItem(`${ZOOM_KEY}.${id}`);
+    if (raw === 'fit') return 'fit';
+    const n = Number(raw);
+    return ZOOMS.includes(n) ? n : DEFAULT_ZOOM;
+  } catch {
+    return DEFAULT_ZOOM; // private mode: a session-only preference is no tragedy
+  }
+}
+
+function saveZoom(id: DeckId, z: Zoom): void {
+  try {
+    localStorage.setItem(`${ZOOM_KEY}.${id}`, String(z));
+  } catch {
+    /* see above */
+  }
+}
+
+/* ---------------------------------------------------------------- palette */
+
 interface Palette {
   deck: string;
   played: string;
@@ -56,8 +90,10 @@ interface Palette {
   grid: string;
   ink: string;
   ink3: string;
+  ink4: string;
   warn: string;
   live: string;
+  cue: string;
 }
 
 /** Colours come from the cascade (tokens.css) so `--deck` resolves per side. */
@@ -71,16 +107,42 @@ function readPalette(el: HTMLElement): Palette {
     grid: v('--line-2', 'gray'),
     ink: v('--ink', 'white'),
     ink3: v('--ink-3', 'gray'),
+    ink4: v('--ink-4', 'gray'),
     warn: v('--warn', 'orange'),
     live: v('--live', 'lime'),
+    cue: v('--cue', 'violet'),
   };
 }
 
-const BAND_TOP = 11; // room for the IN/OUT flags
-const BAND_BOT = 6;
+/* -------------------------------------------------------------- geometry */
+
 const FLAG_W = 9;
 const FLAG_H = 10;
 const GRAB_PX = 7;
+const COL = 3; // one waveform bar every 3px: 2px of ink, 1px of air
+const MAX_BEAT_OFFSET = 600; // mirrors the server's clamp
+
+/** Band heights for a given panel height. The booth lane is short and wide, but not always. */
+function bands(h: number) {
+  const ruler = Math.round(clamp(h * 0.2, 6, 14)); // bar numbers + the grid drag handle
+  const top = Math.round(clamp(h * 0.16, 4, 11)); // room for the IN/OUT flags
+  return { ruler, top };
+}
+
+/**
+ * The bar spacing, in bars, that keeps grid lines at least this far apart. Zoomed out, drawing
+ * every bar would turn the grid into a grey wash, so we thin it to every 2nd/4th/8th bar and
+ * then give up entirely rather than lie about where the beats are.
+ */
+function barStride(barPx: number): number {
+  if (barPx >= 11) return 1;
+  // Once bars are being skipped the survivors have to be properly sparse, or a "grid" of every
+  // fourth bar reads as the same grey picket fence we were trying to avoid.
+  for (const s of [2, 4, 8, 16]) {
+    if (barPx * s >= 40) return s;
+  }
+  return 0;
+}
 
 type DragMode = 'scrub' | 'in' | 'out' | 'loop';
 interface Drag {
@@ -91,17 +153,29 @@ interface Drag {
   to: number;
 }
 
+interface GridDrag {
+  pointerId: number;
+  startX: number;
+  base: number; // beatOffset when the drag began
+  offset: number; // where it has got to, drawn optimistically
+}
+
 /* ---------------------------------------------------------------- component */
 
 /**
  * Waveform / beat-grid / cue-point timeline. Draws to a canvas inside a rAF-aligned
  * effect so the 60fps playhead never re-renders any React tree above it.
+ *
+ * The window scrolls under a fixed central playhead: everything left of centre has been played,
+ * everything right of it is coming. Stack two of these and a beat that lines up vertically is a
+ * beat that lines up in the room.
  */
 export function Timeline({ id }: { id: DeckId }) {
   const deck = useDeck(id);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const cvsRef = useRef<HTMLCanvasElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
+  const rulerRef = useRef<HTMLDivElement | null>(null);
 
   const posRef = useRef(0);
   const drawRef = useRef<() => void>(() => {});
@@ -109,16 +183,43 @@ export function Timeline({ id }: { id: DeckId }) {
   const sizeRef = useRef({ w: 0, h: 0 });
   const palRef = useRef<Palette | null>(null);
   const dragRef = useRef<Drag | null>(null);
+  const gridRef = useRef<GridDrag | null>(null);
+  /** Window centre, frozen for the length of a drag so the view cannot chase the pointer. */
+  const viewRef = useRef<number | null>(null);
+  /** The first downbeat, kept in a ref and fed by BeatOffsetTap — see its note. */
+  const offsetRef = useRef(deck?.beatOffset ?? 0);
+
+  const [zoom, setZoom] = useState<Zoom>(() => loadZoom(id));
 
   const videoId = deck?.video?.videoId ?? '';
   const dur = deck?.video?.durationSec ?? 0;
-  const bars = useMemo(() => (videoId ? waveformBars(videoId) : []), [videoId]);
+  // Resolution follows the track's length, not the panel's width, so a 4-second window has real
+  // detail in it and every client still draws the identical shape.
+  const bars = useMemo(() => (videoId ? waveformBars(videoId, barCountFor(dur)) : []), [videoId, dur]);
 
   const seekTx = useRef(throttled(SEND_MS, (sec: number) => cmd({ action: 'deck.seek', deck: id, positionSec: sec })));
   const cueTx = useRef(
     throttled(SEND_MS, (which: 'in' | 'out', sec: number) =>
       cmd(which === 'in' ? { action: 'deck.cueIn', deck: id, sec } : { action: 'deck.cueOut', deck: id, sec }),
     ),
+  );
+  const offsetTx = useRef(throttled(SEND_MS, (sec: number) => cmd({ action: 'deck.beatOffset', deck: id, sec })));
+
+  /* ------------------------------------------------------------- the view */
+
+  /**
+   * Time <-> pixels for a panel `width`. Everything - drawing, seeking, the flag handles - goes
+   * through this one mapping, so they cannot disagree about where a second lives.
+   */
+  const viewFor = useCallback(
+    (width: number) => {
+      if (zoom === 'fit' || dur <= 0) {
+        return { t0: 0, pps: width / Math.max(0.001, dur) };
+      }
+      const centre = viewRef.current ?? clamp(posRef.current, 0, dur);
+      return { t0: centre - zoom / 2, pps: width / zoom };
+    },
+    [zoom, dur],
   );
 
   /* ---------------------------------------------------------------- drawing */
@@ -133,8 +234,9 @@ export function Timeline({ id }: { id: DeckId }) {
 
     ctx.clearRect(0, 0, w, h);
 
-    const top = BAND_TOP;
-    const bot = h - BAND_BOT;
+    const band = bands(h);
+    const top = band.top;
+    const bot = h - band.ruler;
     const mid = (top + bot) / 2;
     const half = (bot - top) / 2;
 
@@ -151,11 +253,11 @@ export function Timeline({ id }: { id: DeckId }) {
         // duration unknown but we do know the shape — show it, flat and quiet
         ctx.globalAlpha = 0.16;
         ctx.fillStyle = pal.unplayed;
-        const cols = Math.floor(w / 3);
+        const cols = Math.floor(w / COL);
         for (let c = 0; c < cols; c++) {
           const a = bars[Math.floor((c / cols) * bars.length)] ?? 0;
           const bh = Math.max(1, a * half * 0.7);
-          ctx.fillRect(c * 3, mid - bh, 2, bh * 2);
+          ctx.fillRect(c * COL, mid - bh, COL - 1, bh * 2);
         }
       }
       ctx.globalAlpha = 1;
@@ -166,7 +268,9 @@ export function Timeline({ id }: { id: DeckId }) {
       return;
     }
 
-    const xOf = (t: number) => (t / dur) * w;
+    const { t0, pps } = viewFor(w);
+    const xOf = (t: number) => (t - t0) * pps;
+    const tAt = (x: number) => t0 + x / pps;
     const pos = clamp(posRef.current, 0, dur);
     const px = xOf(pos);
 
@@ -181,45 +285,102 @@ export function Timeline({ id }: { id: DeckId }) {
     if (loopOn || selTo > selFrom) {
       const a = selTo > selFrom ? selFrom : cueIn;
       const b = selTo > selFrom ? selTo : cueOut;
-      ctx.fillStyle = pal.deck;
-      ctx.globalAlpha = 0.09;
-      ctx.fillRect(xOf(a), top - 4, Math.max(1, xOf(b) - xOf(a)), bot - top + 8);
-      ctx.globalAlpha = 1;
+      const xa = clamp(xOf(a), 0, w);
+      const xb = clamp(xOf(b), 0, w);
+      if (xb > xa) {
+        ctx.fillStyle = pal.deck;
+        ctx.globalAlpha = 0.09;
+        ctx.fillRect(xa, top - 4, xb - xa, bot - top + 8);
+        ctx.globalAlpha = 1;
+      }
     }
 
     // ---- waveform bars
-    const cols = Math.floor(w / 3);
+    const n = bars.length;
     const outStart = cueOut > cueIn ? cueOut : dur;
+    const cols = Math.ceil(w / COL);
     for (let c = 0; c < cols; c++) {
-      const x = c * 3;
-      const i0 = Math.floor((c / cols) * bars.length);
-      const i1 = Math.max(i0 + 1, Math.floor(((c + 1) / cols) * bars.length));
+      const x = c * COL;
+      const ta = tAt(x);
+      const tb = tAt(x + COL);
+      if (tb <= 0 || ta >= dur) continue; // off the front or the back of the track
+      const i0 = clamp(Math.floor((ta / dur) * n), 0, n - 1);
+      const i1 = clamp(Math.ceil((tb / dur) * n), i0 + 1, n);
       let a = 0;
-      for (let i = i0; i < i1 && i < bars.length; i++) a = Math.max(a, bars[i] ?? 0);
-      const t = (c / cols) * dur;
-      const outside = t < cueIn || t > outStart;
+      for (let i = i0; i < i1; i++) a = Math.max(a, bars[i] ?? 0);
+      const outside = tb < cueIn || ta > outStart;
       ctx.globalAlpha = outside ? 0.25 : 1;
-      ctx.fillStyle = x + 2 <= px ? pal.played : pal.unplayed;
+      ctx.fillStyle = x + COL - 1 <= px ? pal.played : pal.unplayed;
       const bh = Math.max(1, a * half);
-      ctx.fillRect(x, mid - bh, 2, bh * 2);
+      ctx.fillRect(x, mid - bh, COL - 1, bh * 2);
     }
     ctx.globalAlpha = 1;
 
-    // ---- beat grid (skip when it would turn into mush)
+    // ---- ruler strip: the bar-number gutter, and the handle the grid is dragged by
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = pal.grid;
+    ctx.fillRect(0, bot + 1, w, 1);
+    ctx.globalAlpha = 1;
+
+    // ---- start / end of the track: with a scrolling window these are real edges
+    for (const edge of [0, dur]) {
+      const ex = Math.round(xOf(edge)) + 0.5;
+      if (ex < -1 || ex > w + 1) continue;
+      ctx.strokeStyle = pal.ink4;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(ex, top - 4);
+      ctx.lineTo(ex, bot + 1);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // ---- beat grid, hung off the deck's first downbeat rather than off 0:00
     const bpm = deck.bpm ?? 0;
-    if (bpm > 0) {
-      const stepPx = (60 / bpm) * (w / dur);
-      if (stepPx >= 4) {
-        const beats = beatGrid(bpm, 0, dur);
-        for (let i = 0; i < beats.length; i++) {
-          const bx = Math.round(xOf(beats[i])) + 0.5;
-          const bar = i % 4 === 0;
-          ctx.globalAlpha = bar ? 0.4 : 0.16;
-          ctx.strokeStyle = bar ? pal.ink3 : pal.grid;
+    const gridDrag = gridRef.current;
+    const offset = gridDrag ? gridDrag.offset : offsetRef.current;
+    const bw = beatWindow(bpm, offset, tAt(-2), tAt(w + 2));
+    if (bw) {
+      const stepPx = bw.spb * pps;
+      const stride = barStride(stepPx * 4);
+      const showBeats = stride === 1 && stepPx >= 5;
+      const showNums = stepPx * 4 * stride >= 30;
+      if (stride > 0) {
+        ctx.font = '8px ui-monospace, monospace';
+        ctx.textBaseline = 'top';
+        ctx.lineWidth = 1;
+        for (let k = 0; k < bw.count; k++) {
+          const i = bw.firstIndex + k;
+          const onBar = (((i % 4) + 4) % 4) === 0;
+          if (!onBar && !showBeats) continue;
+          const barNo = Math.floor(i / 4); // 0 is the downbeat the DJ marked
+          if (onBar && stride > 1 && (((barNo % stride) + stride) % stride) !== 0) continue;
+          const t = bw.first + k * bw.spb;
+          const bx = Math.round(xOf(t)) + 0.5;
+          if (bx < -1 || bx > w + 1) continue;
+          const anchor = i === 0; // the downbeat itself, so the DJ can see what they set
+          ctx.globalAlpha = anchor ? 0.95 : onBar ? (stride > 1 ? 0.34 : 0.62) : 0.55;
+          ctx.strokeStyle = anchor ? pal.cue : onBar ? pal.ink3 : pal.ink4;
           ctx.beginPath();
-          ctx.moveTo(bx, bar ? top - 3 : mid - half * 0.55);
-          ctx.lineTo(bx, bar ? bot + 3 : mid + half * 0.55);
+          if (onBar) {
+            ctx.moveTo(bx, top - 3);
+            ctx.lineTo(bx, bot);
+          } else {
+            // Off-beats live in the margins above and below the waveform: a tick drawn through
+            // the middle of a dense 4-second window is a tick nobody can see.
+            const tick = Math.max(3, half * 0.3);
+            ctx.moveTo(bx, top - 1);
+            ctx.lineTo(bx, top - 1 + tick);
+            ctx.moveTo(bx, bot);
+            ctx.lineTo(bx, bot - tick);
+          }
           ctx.stroke();
+          if (onBar && showNums && bx < w - 44) {
+            // ...but not underneath the remaining-time readout in the ruler's far corner.
+            ctx.globalAlpha = anchor ? 0.95 : 0.5;
+            ctx.fillStyle = anchor ? pal.cue : pal.ink3;
+            ctx.fillText(String(barNo + 1), bx + 2, bot + 3);
+          }
         }
         ctx.globalAlpha = 1;
       }
@@ -228,12 +389,13 @@ export function Timeline({ id }: { id: DeckId }) {
     // ---- IN / OUT flags
     const flag = (t: number, side: 1 | -1, colour: string, label: string) => {
       const fx = Math.round(xOf(t)) + 0.5;
+      if (fx < -FLAG_W || fx > w + FLAG_W) return;
       ctx.strokeStyle = colour;
       ctx.globalAlpha = 0.9;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(fx, 1);
-      ctx.lineTo(fx, bot + 4);
+      ctx.lineTo(fx, bot);
       ctx.stroke();
       ctx.globalAlpha = 1;
       ctx.fillStyle = colour;
@@ -252,6 +414,21 @@ export function Timeline({ id }: { id: DeckId }) {
     if (cueIn > 0) flag(cueIn, 1, pal.live, 'I');
     if (cueOut > 0) flag(cueOut, -1, pal.warn, 'O');
 
+    // ---- elapsed / remaining, drawn rather than rendered so the DOM stays still at 60fps
+    ctx.font = '9px ui-monospace, monospace';
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = pal.ink3;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(fmtTimeMs(pos), 4, 1);
+    // Remaining goes in the ruler's far corner, out from under the zoom buttons.
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('-' + fmtTime(Math.max(0, dur - pos)), w - 4, h - 1);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.globalAlpha = 1;
+
     // ---- playhead
     ctx.save();
     ctx.shadowColor = pal.deck;
@@ -263,7 +440,14 @@ export function Timeline({ id }: { id: DeckId }) {
     ctx.lineTo(Math.round(px) + 0.5, h);
     ctx.stroke();
     ctx.restore();
-  }, [deck, dur, bars]);
+    ctx.fillStyle = pal.deck;
+    ctx.beginPath();
+    ctx.moveTo(Math.round(px) - 3.5, 0);
+    ctx.lineTo(Math.round(px) + 4.5, 0);
+    ctx.lineTo(Math.round(px) + 0.5, 4);
+    ctx.closePath();
+    ctx.fill();
+  }, [deck, dur, bars, viewFor]);
 
   /* ---- keep the latest draw reachable, and redraw on every state change --- */
   useEffect(() => {
@@ -289,6 +473,8 @@ export function Timeline({ id }: { id: DeckId }) {
       cvs.style.height = h + 'px';
       const ctx = cvs.getContext('2d');
       ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // The drag handle has to sit exactly over the strip the canvas drew, whatever box we got.
+      if (rulerRef.current) rulerRef.current.style.height = bands(h).ruler + 'px';
       drawRef.current();
     };
     measure();
@@ -301,9 +487,11 @@ export function Timeline({ id }: { id: DeckId }) {
   useEffect(() => {
     const seek = seekTx.current;
     const cue = cueTx.current;
+    const off = offsetTx.current;
     return () => {
       seek.cancel();
       cue.cancel();
+      off.cancel();
       if (dragRef.current) {
         dragRef.current = null;
         setScrub(id, false);
@@ -317,17 +505,22 @@ export function Timeline({ id }: { id: DeckId }) {
     const wrap = wrapRef.current;
     if (!wrap || dur <= 0) return 0;
     const r = wrap.getBoundingClientRect();
-    return clamp(((clientX - r.left) / Math.max(1, r.width)) * dur, 0, dur);
+    const { t0, pps } = viewFor(Math.max(1, r.width));
+    return clamp(t0 + (clientX - r.left) / pps, 0, dur);
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || !deck?.video || dur <= 0) return;
     const wrap = wrapRef.current;
     if (!wrap) return;
+    // Pin the window before anything reads it: a drag must move the playhead through a still
+    // view, not drag the view along behind the playhead.
+    viewRef.current = clamp(posRef.current, 0, dur);
     const r = wrap.getBoundingClientRect();
+    const { t0, pps } = viewFor(Math.max(1, r.width));
     const x = e.clientX - r.left;
-    const t = timeAt(e.clientX);
-    const xOf = (v: number) => (v / dur) * r.width;
+    const t = clamp(t0 + x / pps, 0, dur);
+    const xOf = (v: number) => (v - t0) * pps;
 
     let mode: DragMode = e.shiftKey ? 'loop' : 'scrub';
     if (!e.shiftKey) {
@@ -340,6 +533,7 @@ export function Timeline({ id }: { id: DeckId }) {
 
     if (mode === 'scrub') {
       setScrub(id, true);
+      posRef.current = t;
       seekTx.current.call(t);
     } else if (mode === 'in') {
       cueTx.current.call('in', t);
@@ -385,6 +579,7 @@ export function Timeline({ id }: { id: DeckId }) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
     dragRef.current = null;
+    viewRef.current = null; // the window goes back to following the playhead
     if (wrapRef.current?.hasPointerCapture(e.pointerId)) wrapRef.current.releasePointerCapture(e.pointerId);
 
     if (drag.mode === 'scrub') {
@@ -414,6 +609,61 @@ export function Timeline({ id }: { id: DeckId }) {
     if (tip) tip.style.opacity = '0';
   };
 
+  /* ---- the beat grid's own handle ---------------------------------------- */
+
+  const bpm = deck?.bpm ?? 0;
+  const gridReady = !!deck?.video && dur > 0 && bpm > 0;
+
+  const onGridDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !gridReady) return;
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    viewRef.current = clamp(posRef.current, 0, dur);
+    gridRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      base: offsetRef.current,
+      offset: offsetRef.current,
+    };
+  };
+
+  const onGridMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const g = gridRef.current;
+    if (!g || g.pointerId !== e.pointerId) return;
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const { pps } = viewFor(Math.max(1, wrap.getBoundingClientRect().width));
+    // The grid repeats every bar, so a nudge past zero wraps forward rather than jamming: the
+    // lines land in the same place either way and the DJ never hits an invisible wall.
+    const barLen = (60 / bpm) * 4;
+    let o = g.base + (e.clientX - g.startX) / pps;
+    if (o < 0) o = ((o % barLen) + barLen) % barLen;
+    g.offset = clamp(o, 0, MAX_BEAT_OFFSET);
+    offsetTx.current.call(g.offset);
+    draw();
+  };
+
+  const onGridUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const g = gridRef.current;
+    if (!g || g.pointerId !== e.pointerId) return;
+    gridRef.current = null;
+    viewRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    offsetTx.current.cancel();
+    cmd({ action: 'deck.beatOffset', deck: id, sec: g.offset });
+    draw();
+  };
+
+  const setDownbeatHere = () => {
+    if (!gridReady) return;
+    cmd({ action: 'deck.beatOffset', deck: id, sec: clamp(posRef.current, 0, MAX_BEAT_OFFSET) });
+  };
+
+  const pickZoom = (z: Zoom) => {
+    setZoom(z);
+    saveZoom(id, z);
+  };
+
   return (
     <div className="tl">
       <div
@@ -434,6 +684,60 @@ export function Timeline({ id }: { id: DeckId }) {
         <canvas className="tl-canvas" ref={cvsRef} />
         <div className="tl-tip num" ref={tipRef} />
       </div>
+
+      <div
+        className={'tl-ruler' + (gridReady ? '' : ' is-idle')}
+        ref={rulerRef}
+        onPointerDown={onGridDown}
+        onPointerMove={onGridMove}
+        onPointerUp={onGridUp}
+        onPointerCancel={onGridUp}
+        title={
+          gridReady
+            ? 'Drag sideways to slide the beat grid onto the beat (set a BPM first if it drifts)'
+            : 'Set a BPM to get a beat grid'
+        }
+      />
+
+      <div className="tl-tools">
+        {ZOOMS.map((z) => (
+          <button
+            key={z}
+            type="button"
+            className={'tl-zoom' + (zoom === z ? ' is-on' : '')}
+            onClick={() => pickZoom(z)}
+            title={`Show ${z} seconds around the playhead`}
+          >
+            {z}s
+          </button>
+        ))}
+        <button
+          type="button"
+          className={'tl-zoom' + (zoom === 'fit' ? ' is-on' : '')}
+          onClick={() => pickZoom('fit')}
+          title="Fit the whole track in the panel"
+        >
+          fit
+        </button>
+        <button
+          type="button"
+          className="tl-zoom tl-set1"
+          onClick={setDownbeatHere}
+          disabled={!gridReady}
+          title="Set the downbeat here — drops bar 1 of the beat grid on the playhead"
+        >
+          set 1
+        </button>
+      </div>
+
+      <BeatOffsetTap
+        id={id}
+        onChange={(sec) => {
+          offsetRef.current = sec;
+          drawRef.current();
+        }}
+      />
+
       <PlayheadTap
         id={id}
         onTick={(p) => {
@@ -449,6 +753,28 @@ export function Timeline({ id }: { id: DeckId }) {
       />
     </div>
   );
+}
+
+/**
+ * Watches the deck's first downbeat.
+ *
+ * It needs its own subscription because the store's deck-equality check does not yet know about
+ * `beatOffset`: a deck whose only change is where bar 1 sits compares equal, so `useDeck` never
+ * hands the timeline the new value. Like PlayheadTap this renders nothing, so the cost is one
+ * diff of an empty component per broadcast, and the canvas is redrawn imperatively. Delete it the
+ * day `eqDeck` in lib/store.ts compares beatOffset.
+ */
+function BeatOffsetTap({ id, onChange }: { id: DeckId; onChange: (sec: number) => void }) {
+  const room = useRoom();
+  const sec = room?.decks[id === 'a' ? 0 : 1]?.beatOffset ?? 0;
+  const cb = useRef(onChange);
+  useEffect(() => {
+    cb.current = onChange;
+  }, [onChange]);
+  useEffect(() => {
+    cb.current(sec);
+  }, [sec]);
+  return null;
 }
 
 /**
