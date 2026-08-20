@@ -11,7 +11,6 @@ services:
     environment:
       DJ_PASSWORD: ${DJ_PASSWORD:?set DJ_PASSWORD in .env}
       SESSION_SECRET: ${SESSION_SECRET:-}
-      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       DATA_DIR: /data
     volumes:
       - dj-data:/data

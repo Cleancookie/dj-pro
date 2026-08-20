@@ -36,16 +36,12 @@ type Config struct {
 	Port          string
 	DJPassword    string
 	SessionSecret []byte
-	YouTubeAPIKey string
 	DataDir       string
 	// MediaDir holds the DJ's own audio/video files. They are served at /media/ and played through
 	// a media element rather than a YouTube iframe, which is what makes continuous pitch - and so
 	// real beatmatching - possible. Empty (the default) leaves the whole feature off.
 	MediaDir string
 }
-
-// SearchEnabled reports whether /api/search can do any work.
-func (c *Config) SearchEnabled() bool { return c.YouTubeAPIKey != "" }
 
 // MediaEnabled reports whether file-backed decks are available at all.
 func (c *Config) MediaEnabled() bool { return c.MediaDir != "" }
@@ -54,11 +50,10 @@ const defaultPassword = "letmein"
 
 func loadConfig() *Config {
 	c := &Config{
-		Port:          env("PORT", "8080"),
-		DJPassword:    os.Getenv("DJ_PASSWORD"),
-		YouTubeAPIKey: strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")),
-		DataDir:       env("DATA_DIR", "./data"),
-		MediaDir:      strings.TrimSpace(os.Getenv("MEDIA_DIR")),
+		Port:       env("PORT", "8080"),
+		DJPassword: os.Getenv("DJ_PASSWORD"),
+		DataDir:    env("DATA_DIR", "./data"),
+		MediaDir:   strings.TrimSpace(os.Getenv("MEDIA_DIR")),
 	}
 	if c.DJPassword == "" {
 		log.Printf("!!! ================================================================")
@@ -117,7 +112,7 @@ func main() {
 
 	errc := make(chan error, 1)
 	go func() {
-		log.Printf("listening on http://0.0.0.0:%s (search=%v data=%s)", cfg.Port, cfg.SearchEnabled(), cfg.DataDir)
+		log.Printf("listening on http://0.0.0.0:%s (data=%s)", cfg.Port, cfg.DataDir)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 		}
@@ -141,7 +136,7 @@ func main() {
 
 func routes(cfg *Config, hub *Hub) http.Handler {
 	mux := http.NewServeMux()
-	yt := NewYouTube(cfg.YouTubeAPIKey)
+	yt := NewYouTube()
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -150,7 +145,6 @@ func routes(cfg *Config, hub *Hub) http.Handler {
 	mux.HandleFunc("POST /api/admin/logout", handleLogout)
 	mux.HandleFunc("GET /api/me", handleMe(cfg))
 	mux.HandleFunc("GET /api/resolve", yt.handleResolve)
-	mux.HandleFunc("GET /api/search", yt.handleSearch)
 	mux.HandleFunc("GET /api/media", handleMediaList(cfg))
 	if cfg.MediaEnabled() {
 		// The DJ's own files. Read-only, and only what is under MEDIA_DIR: http.Dir already

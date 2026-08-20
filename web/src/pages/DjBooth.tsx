@@ -9,7 +9,6 @@ import { DeckPanel } from '../components/dj/DeckPanel';
 import { TopBar } from '../components/dj/TopBar';
 import { MixerColumn } from '../components/dj/MixerColumn';
 import { SidePanel } from '../components/dj/SidePanel';
-import { LibraryBar } from '../components/dj/LibraryBar';
 import './DjBooth.css';
 
 /* ------------------------------------------------------------------ helpers */
@@ -393,9 +392,6 @@ export function DjBooth() {
           </div>
           <div className="booth-side">
             <SidePanel />
-          </div>
-          <div className="booth-lib">
-            <LibraryBar />
           </div>
         </div>
       </div>

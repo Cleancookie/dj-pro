@@ -11,7 +11,8 @@
 .sp-tabs {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* All four fit on one row in the side panel's width; wrapping them read as a mistake. */
+  grid-template-columns: repeat(4, 1fr);
   border-bottom: 1px solid var(--line);
   background: var(--panel-2);
 }

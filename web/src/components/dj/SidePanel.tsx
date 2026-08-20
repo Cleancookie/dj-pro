@@ -6,6 +6,7 @@ import { fmtTime, fmtTimeMs } from '../../lib/deckmath';
 import { previewPlay } from '../../lib/engine';
 import { DEFAULT_KIND, DEFAULT_MS, KIND_LABEL } from './MixerColumn';
 import { PreviewBar } from './PreviewBar';
+import { LibraryBar } from './LibraryBar';
 import { Fader } from './Fader';
 import './SidePanel.css';
 
@@ -490,7 +491,7 @@ function CrateTab() {
       <div className="sp-empty">
         <div className="sp-empty-plate">The crate is empty</div>
         <p>
-          Paste one link — or a whole list of them — into the library bar below and hit <b>+ CRATE</b>. Drag rows to
+          Paste one link — or a whole list of them — into the box above and hit <b>+ CRATE</b>. Drag rows to
           reorder, and click a row to plan how it mixes in.
         </p>
         <p>
@@ -812,7 +813,8 @@ export function SidePanel() {
   ];
 
   return (
-    <aside className="sp" aria-label="Crate, requests, chat and crowd">
+    <aside className="sp" aria-label="Library, crate, requests, chat and crowd">
+      <LibraryBar />
       <div className="sp-tabs" role="tablist">
         {tabs.map((t) => (
           <button

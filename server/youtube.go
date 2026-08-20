@@ -40,15 +40,14 @@ func thumbFor(videoID string) string {
 	return "https://i.ytimg.com/vi/" + videoID + "/hqdefault.jpg"
 }
 
-// YouTube talks to YouTube: oEmbed for metadata (no key needed) and, when a key is configured,
-// Data API v3 for search.
+// YouTube talks to YouTube: oEmbed metadata for a pasted link. No API key, no search - the DJ
+// brings the links.
 type YouTube struct {
-	apiKey string
-	http   *http.Client
+	http *http.Client
 }
 
-func NewYouTube(apiKey string) *YouTube {
-	return &YouTube{apiKey: apiKey, http: &http.Client{Timeout: 10 * time.Second}}
+func NewYouTube() *YouTube {
+	return &YouTube{http: &http.Client{Timeout: 10 * time.Second}}
 }
 
 type oembedResp struct {
@@ -115,92 +114,4 @@ func (y *YouTube) handleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, v)
-}
-
-type searchResp struct {
-	Items []struct {
-		ID struct {
-			VideoID string `json:"videoId"`
-		} `json:"id"`
-		Snippet struct {
-			Title        string `json:"title"`
-			ChannelTitle string `json:"channelTitle"`
-			Thumbnails   map[string]struct {
-				URL string `json:"url"`
-			} `json:"thumbnails"`
-		} `json:"snippet"`
-	} `json:"items"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
-func (y *YouTube) handleSearch(w http.ResponseWriter, r *http.Request) {
-	if y.apiKey == "" {
-		writeErr(w, http.StatusNotImplemented, "search disabled")
-		return
-	}
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if q == "" {
-		writeErr(w, http.StatusBadRequest, "missing ?q=")
-		return
-	}
-	if len(q) > 200 {
-		q = q[:200]
-	}
-
-	qs := url.Values{}
-	qs.Set("part", "snippet")
-	qs.Set("type", "video")
-	qs.Set("maxResults", "12")
-	qs.Set("videoEmbeddable", "true")
-	qs.Set("q", q)
-	qs.Set("key", y.apiKey)
-
-	resp, err := y.http.Get("https://www.googleapis.com/youtube/v3/search?" + qs.Encode())
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, "youtube search request failed: "+err.Error())
-		return
-	}
-	defer resp.Body.Close()
-
-	var sr searchResp
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&sr); err != nil {
-		writeErr(w, http.StatusBadGateway, "youtube search returned unreadable JSON")
-		return
-	}
-	if resp.StatusCode != http.StatusOK {
-		msg := "youtube search returned " + resp.Status
-		if sr.Error != nil && sr.Error.Message != "" {
-			msg += ": " + sr.Error.Message
-		}
-		writeErr(w, http.StatusBadGateway, msg)
-		return
-	}
-
-	out := make([]*Video, 0, len(sr.Items))
-	for _, it := range sr.Items {
-		if !validVideoID(it.ID.VideoID) {
-			continue
-		}
-		thumb := ""
-		for _, key := range []string{"medium", "high", "default"} {
-			if t, ok := it.Snippet.Thumbnails[key]; ok && t.URL != "" {
-				thumb = t.URL
-				break
-			}
-		}
-		title := sanitizeText(it.Snippet.Title, 200)
-		if title == "" {
-			title = "Unknown track"
-		}
-		out = append(out, &Video{
-			ID:      newID(),
-			VideoID: it.ID.VideoID,
-			Title:   title,
-			Author:  sanitizeText(it.Snippet.ChannelTitle, 100),
-			Thumb:   safeThumb(thumb, it.ID.VideoID),
-		})
-	}
-	writeJSON(w, http.StatusOK, out)
 }

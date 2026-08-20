@@ -32,12 +32,15 @@ information density. It should look like professional equipment, not a website w
 ┌ TopBar 56px ─────────────────────────────────────────────────────────────────────┐
 │ ▣ DJ PRO   room title (editable)   ● LIVE   ♫ 12 listening   [master meter]  ⚙   │
 ├──────────────────────┬────────────────┬──────────────────────┬───────────────────┤
-│  DeckPanel A         │  MixerColumn   │  DeckPanel B         │  SidePanel        │
-│  (flex 1, min 380px) │  200px fixed   │  (flex 1, min 380px) │  320px fixed      │
+│  DeckPanel A         │  MixerColumn   │  DeckPanel B         │  LibraryBar       │
+│  (flex 1, min 380px) │  200px fixed   │  (flex 1, min 380px) │  paste a URL,     │
+│                      │                │                      │  results as cards │
+│                      │                │                      ├───────────────────┤
+│                      │                │                      │  SidePanel        │
+│                      │                │                      │  340px fixed      │
 │                      │                │                      │  crate / requests │
-├──────────────────────┴────────────────┴──────────────────────┤  / chat / crowd   │
-│  LibraryBar 148px — paste URL / search, results as cards      │                   │
-└───────────────────────────────────────────────────────────────┴───────────────────┘
+│                      │                │                      │  / chat / crowd   │
+└──────────────────────┴────────────────┴──────────────────────┴───────────────────┘
 ```
 
 ## DeckPanel internals, top to bottom

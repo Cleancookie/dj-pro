@@ -43,7 +43,7 @@ const MONITOR_DEFAULTS: MonitorPrefs = { cueVol: 0.9, masterVol: 0.8, cueMix: 0.
 const BURST_TTL_MS = 2_500;
 const CHAT_CAP = 200;
 
-const DEFAULT_CONFIG: ServerConfig = { searchEnabled: false, mediaEnabled: false, deckRates: [1] };
+const DEFAULT_CONFIG: ServerConfig = { mediaEnabled: false, deckRates: [1] };
 
 interface StoreState {
   room: RoomState | null;
@@ -311,8 +311,7 @@ const eqBursts = (a: Burst[], b: Burst[]): boolean =>
 
 const eqConfig = (a: ServerConfig, b: ServerConfig): boolean =>
   a === b ||
-  (a.searchEnabled === b.searchEnabled &&
-    a.mediaEnabled === b.mediaEnabled &&
+  (a.mediaEnabled === b.mediaEnabled &&
     a.deckRates.length === b.deckRates.length &&
     a.deckRates.every((r, i) => r === b.deckRates[i]));
 

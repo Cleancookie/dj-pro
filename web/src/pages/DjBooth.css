@@ -8,12 +8,11 @@
   min-width: 1300px;
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(390px, 1fr) 200px minmax(390px, 1fr) 320px;
-  grid-template-rows: 56px minmax(0, 1fr) 148px;
+  grid-template-columns: minmax(390px, 1fr) 200px minmax(390px, 1fr) 340px;
+  grid-template-rows: 56px minmax(0, 1fr);
   grid-template-areas:
     'top top top top'
-    'da  mx  db  side'
-    'lib lib lib side';
+    'da  mx  db  side';
   overflow: hidden;
 }
 .booth > * {
@@ -38,9 +37,6 @@
 .booth-side {
   grid-area: side;
   border-left: 1px solid var(--line);
-}
-.booth-lib {
-  grid-area: lib;
 }
 
 /* The focused deck is where [ and ] land, so it needs a quiet marker. */
