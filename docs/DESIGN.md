@@ -24,7 +24,13 @@ information density. It should look like professional equipment, not a website w
    engaged state, not ambiguous outlines.
 9. Every interactive control needs a `title` (tooltip) and an accessible label. Keyboard focus
    must be visible: `outline: 1px solid var(--deck, var(--a)); outline-offset: 1px`.
-10. **Empty states are designed**, not blank: an empty deck shows a dashed "DROP A TRACK" plate,
+10. **Every continuous control goes home on middle-click** — a knob to its centre, a fader to its
+    detent, the pitch fader to 0.00%. Double-click still does the same thing; middle-click is the
+    one-handed version of it. A fader with no detent has no home and does nothing. The gesture
+    belongs in the control's `title` so it can be found, and the control must cancel the
+    *mousedown* for button 1, not merely the `auxclick`, or the browser's autoscroll ring appears
+    before we ever hear about the click.
+11. **Empty states are designed**, not blank: an empty deck shows a dashed "DROP A TRACK" plate,
     an empty crate explains how to add one, and an empty request list says where requests come from.
 
 ## Booth layout (page `/admin`)

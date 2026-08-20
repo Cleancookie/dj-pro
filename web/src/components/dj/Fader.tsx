@@ -25,6 +25,17 @@ const HALF_H = 10;
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
 /**
+ * Swallows the browser's own middle-button behaviour on a control that uses the button to snap
+ * home. The snap itself is done from the pointer event, but it is the *mousedown* that raises the
+ * autoscroll ring on Linux and Windows, so that is the event which has to be cancelled — by the
+ * time `auxclick` runs the ring is already on screen and the page has begun to drift. Cancelling
+ * here also stops an X11 primary selection being pasted out from under the control.
+ */
+function swallowMiddle(e: { button: number; preventDefault: () => void }) {
+  if (e.button === 1) e.preventDefault();
+}
+
+/**
  * Rate-limits a callback to one call per `ms` while still delivering the most
  * recent value, plus a `flush` that fires immediately (used on pointer release
  * so the server always receives the final position).
@@ -140,6 +151,13 @@ export function Fader({
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (disabled) return;
+    // The middle button sends the fader home, and never starts a drag. A fader without a detent
+    // has no home to go to — better to do nothing than to invent one.
+    if (e.button === 1) {
+      e.preventDefault();
+      if (detent !== undefined) jump(detent);
+      return;
+    }
     e.preventDefault();
     trackRef.current?.focus();
     const onCap = (e.target as HTMLElement).closest('.fader-cap') !== null;
@@ -224,7 +242,7 @@ export function Fader({
     detent === undefined ? undefined : vertical ? { bottom: along(markPct) } : { left: along(markPct) };
 
   const text = fmt(shown);
-  const title = `${label} — ${text}${detent === undefined ? '' : ' · double-click to snap'}`;
+  const title = `${label} — ${text}${detent === undefined ? '' : ' · middle-click or double-click to snap'}`;
 
   return (
     <div
@@ -252,6 +270,8 @@ export function Fader({
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onMouseDown={swallowMiddle}
+        onAuxClick={swallowMiddle}
         onKeyDown={onKeyDown}
         onDoubleClick={onDoubleClick}
       >
