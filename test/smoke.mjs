@@ -165,6 +165,19 @@ const derive = (d, now) => (d.playing ? d.anchorPos + ((now - d.anchorAt) / 1000
   dj.cmd({ action: 'deck.bpm', deck: 'a', bpm: 128 });
   await dj.waitFor((s) => s.decks[0].bpm === 128);
 
+  // A tempo and a downbeat belong to the track. Carrying them into the next one paints a fully
+  // drawn, entirely fictional beat grid over music that has never been analysed.
+  dj.cmd({ action: 'deck.beatOffset', deck: 'a', sec: 1.75 });
+  await dj.waitFor((s) => s.decks[0].beatOffset === 1.75);
+  dj.cmd({ action: 'deck.load', deck: 'a', video: { ...vid, id: '', title: 'Another track' } });
+  await dj.waitFor((s) => s.decks[0].video?.title === 'Another track');
+  const reloaded = dj.state.decks[0];
+  ok('loading over a deck drops the old track\'s bpm and downbeat',
+    reloaded.bpm === 0 && reloaded.beatOffset === 0,
+    `bpm=${reloaded.bpm} offset=${reloaded.beatOffset}`);
+  dj.cmd({ action: 'deck.bpm', deck: 'a', bpm: 128 });
+  await dj.waitFor((s) => s.decks[0].bpm === 128);
+
   dj.cmd({ action: 'mixer.transition', kind: 'crossfade', durationMs: 1000 });
   dj.cmd({ action: 'mixer.fire', to: 'b' });
   await dj.waitFor((s) => s.mixer.auto.active);

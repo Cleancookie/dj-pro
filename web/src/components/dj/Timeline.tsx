@@ -4,7 +4,7 @@ import type { DeckId } from '../../lib/protocol';
 import { cmd, useDeck } from '../../lib/store';
 import { setScrub, usePlayhead } from '../../lib/engine';
 import { beatWindow, fmtTime, fmtTimeMs } from '../../lib/deckmath';
-import { barCountFor, waveformBars } from '../../lib/waveform';
+import { waveformBars } from '../../lib/waveform';
 import './Timeline.css';
 
 /* ------------------------------------------------------------------ helpers */
@@ -48,6 +48,18 @@ function throttled<T extends unknown[]>(ms: number, fn: (...a: T) => void) {
 }
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+
+/**
+ * Where a moment sits inside its bar, in seconds. The beat grid repeats every bar, so this is all
+ * an anchor ever needs to be — and keeping it under one bar means it can never run into the
+ * server's upper bound, which would otherwise turn a downbeat late in a long track into a grid
+ * that is confidently, invisibly wrong.
+ */
+function phaseOf(sec: number, bpm: number): number {
+  if (!(bpm > 0) || !Number.isFinite(sec)) return 0;
+  const barLen = (60 / bpm) * 4;
+  return ((sec % barLen) + barLen) % barLen;
+}
 
 /* ------------------------------------------------------------------- zoom */
 
@@ -120,7 +132,6 @@ const FLAG_W = 9;
 const FLAG_H = 10;
 const GRAB_PX = 7;
 const COL = 3; // one waveform bar every 3px: 2px of ink, 1px of air
-const MAX_BEAT_OFFSET = 600; // mirrors the server's clamp
 
 /** Band heights for a given panel height. The booth lane is short and wide, but not always. */
 function bands(h: number) {
@@ -135,7 +146,7 @@ function bands(h: number) {
  * then give up entirely rather than lie about where the beats are.
  */
 function barStride(barPx: number): number {
-  if (barPx >= 11) return 1;
+  if (barPx >= 16) return 1;
   // Once bars are being skipped the survivors have to be properly sparse, or a "grid" of every
   // fourth bar reads as the same grey picket fence we were trying to avoid.
   for (const s of [2, 4, 8, 16]) {
@@ -184,6 +195,8 @@ export function Timeline({ id }: { id: DeckId }) {
   const palRef = useRef<Palette | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const gridRef = useRef<GridDrag | null>(null);
+  /** Whether the last paint actually put a grid on screen — the ruler is only a handle if it did. */
+  const gridDrawnRef = useRef(false);
   /** Window centre, frozen for the length of a drag so the view cannot chase the pointer. */
   const viewRef = useRef<number | null>(null);
   /** The first downbeat. Held in a ref because the canvas is drawn imperatively. */
@@ -196,7 +209,7 @@ export function Timeline({ id }: { id: DeckId }) {
   const dur = deck?.video?.durationSec ?? 0;
   // Resolution follows the track's length, not the panel's width, so a 4-second window has real
   // detail in it and every client still draws the identical shape.
-  const bars = useMemo(() => (videoId ? waveformBars(videoId, barCountFor(dur)) : []), [videoId, dur]);
+  const bars = useMemo(() => (videoId ? waveformBars(videoId, dur) : []), [videoId, dur]);
 
   const seekTx = useRef(throttled(SEND_MS, (sec: number) => cmd({ action: 'deck.seek', deck: id, positionSec: sec })));
   const cueTx = useRef(
@@ -341,9 +354,11 @@ export function Timeline({ id }: { id: DeckId }) {
     const gridDrag = gridRef.current;
     const offset = gridDrag ? gridDrag.offset : offsetRef.current;
     const bw = beatWindow(bpm, offset, tAt(-2), tAt(w + 2));
+    gridDrawnRef.current = false;
     if (bw) {
       const stepPx = bw.spb * pps;
       const stride = barStride(stepPx * 4);
+      gridDrawnRef.current = stride > 0;
       const showBeats = stride === 1 && stepPx >= 5;
       const showNums = stepPx * 4 * stride >= 30;
       if (stride > 0) {
@@ -357,6 +372,9 @@ export function Timeline({ id }: { id: DeckId }) {
           const barNo = Math.floor(i / 4); // 0 is the downbeat the DJ marked
           if (onBar && stride > 1 && (((barNo % stride) + stride) % stride) !== 0) continue;
           const t = bw.first + k * bw.spb;
+          // Nothing before 0:00 or past the end: there are no bars there to number, and a grid
+          // labelled 0, -1, -2 into the run-up reads as a fault rather than as an anchor.
+          if (t < -0.0005 || t > dur) continue;
           const bx = Math.round(xOf(t)) + 0.5;
           if (bx < -1 || bx > w + 1) continue;
           const anchor = i === 0; // the downbeat itself, so the DJ can see what they set
@@ -623,7 +641,10 @@ export function Timeline({ id }: { id: DeckId }) {
   const gridReady = !!deck?.video && dur > 0 && bpm > 0;
 
   const onGridDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || !gridReady) return;
+    // Not merely "has a BPM": in `fit`, or zoomed far enough out, the grid is not drawn at all, and
+    // a drag there would write hundreds of seconds into the anchor with nothing on screen to show
+    // for it.
+    if (e.button !== 0 || !gridReady || !gridDrawnRef.current) return;
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
     viewRef.current = clamp(posRef.current, 0, dur);
@@ -643,10 +664,7 @@ export function Timeline({ id }: { id: DeckId }) {
     const { pps } = viewFor(Math.max(1, wrap.getBoundingClientRect().width));
     // The grid repeats every bar, so a nudge past zero wraps forward rather than jamming: the
     // lines land in the same place either way and the DJ never hits an invisible wall.
-    const barLen = (60 / bpm) * 4;
-    let o = g.base + (e.clientX - g.startX) / pps;
-    if (o < 0) o = ((o % barLen) + barLen) % barLen;
-    g.offset = clamp(o, 0, MAX_BEAT_OFFSET);
+    g.offset = phaseOf(g.base + (e.clientX - g.startX) / pps, bpm);
     offsetTx.current.call(g.offset);
     draw();
   };
@@ -664,7 +682,11 @@ export function Timeline({ id }: { id: DeckId }) {
 
   const setDownbeatHere = () => {
     if (!gridReady) return;
-    cmd({ action: 'deck.beatOffset', deck: id, sec: clamp(posRef.current, 0, MAX_BEAT_OFFSET) });
+    // The anchor is a phase, not a position: what matters is where the downbeat sits inside a bar,
+    // and every bar after it is the same. Reducing modulo the bar keeps it that way. Clamping
+    // instead - which is what the server's bound would do on its own - silently lands the grid a
+    // third of a beat out for anyone who presses this past 10:00 of a long track.
+    cmd({ action: 'deck.beatOffset', deck: id, sec: phaseOf(posRef.current, bpm) });
   };
 
   const pickZoom = (z: Zoom) => {

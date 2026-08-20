@@ -82,8 +82,8 @@ function arrangement(p: number, rnd: () => number, wobble: number): number {
  * Pass `barCountFor(durationSec)` so every client asks for the same count and therefore draws the
  * same shape; the 400 default is only for the placeholder we show before a duration is known.
  */
-export function waveformBars(videoId: string, count = 400): number[] {
-  const n = Math.max(1, Math.min(24000, Math.floor(count) || 400));
+export function waveformBars(videoId: string, durationSec = 0): number[] {
+  const n = barCountFor(durationSec);
   const id = videoId || 'unknown';
   const key = `${id}|${n}`;
   const hit = cache.get(key);
@@ -92,9 +92,12 @@ export function waveformBars(videoId: string, count = 400): number[] {
   const seed = hashString(id);
   const rnd = mulberry32(seed);
   const wobble = rnd() * Math.PI * 2;
-  // Kick emphasis every half second, i.e. a 120bpm feel. Fixed in seconds rather than as a
-  // fraction of the track so the pattern reads the same however long the track is.
-  const barsPerBeat = Math.max(1, Math.round(BARS_PER_SEC / 2));
+  // Kick emphasis every half second, i.e. a 120bpm feel — derived from this track's own bars per
+  // second, not from the nominal rate. Past the 24000-bar cap the two part company, and a lane
+  // whose pattern runs at a different period cannot be compared by eye with the one above it,
+  // which is the whole point of stacking them.
+  const barsPerSec = durationSec > 0 ? n / durationSec : BARS_PER_SEC;
+  const barsPerBeat = Math.max(1, Math.round(barsPerSec / 2));
 
   const out = new Array<number>(n);
   for (let i = 0; i < n; i++) {

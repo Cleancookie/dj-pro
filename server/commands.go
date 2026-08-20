@@ -538,6 +538,11 @@ func (h *Hub) loadDeck(d *Deck, v *Video, cueInOverride *float64, now int64) {
 	d.Video = v
 	d.Playing = false
 	d.Loop = false
+	// A tempo and a downbeat belong to the track, not to the channel: carrying them over paints a
+	// fully drawn, entirely fictional beat grid on whatever lands here next. Eject already clears
+	// both; loading over a playing deck has to do the same.
+	d.BPM = 0
+	d.BeatOffset = 0
 	// The new track may not honour the rate the old one did, so drop any measured RateActual and
 	// go back to trusting the request until this player reports otherwise.
 	d.applyRate(d.RateReq)
