@@ -10,7 +10,21 @@
 // like a dance track at a glance.
 
 const cache = new Map<string, number[]>();
-const CACHE_LIMIT = 48;
+const CACHE_LIMIT = 12;
+
+/**
+ * Bars per second of audio. The timeline no longer squeezes a whole track into the panel: it
+ * shows a few seconds at a time, so the resolution has to be tied to *time*, not to the width of
+ * the box. Twenty bars a second gives roughly three pixels a bar in a 16-second window on a wide
+ * lane, which is about as fine as a 2px bar with a 1px gap can usefully be drawn.
+ */
+export const BARS_PER_SEC = 20;
+
+/** Bars in the pseudo-waveform for a track of `durationSec`. Deterministic, hence shareable. */
+export function barCountFor(durationSec: number): number {
+  if (!Number.isFinite(durationSec) || durationSec <= 0) return 400;
+  return Math.max(400, Math.min(24000, Math.round(durationSec * BARS_PER_SEC)));
+}
 
 /** FNV-1a, plenty for seeding. */
 function hashString(s: string): number {
@@ -64,9 +78,12 @@ function arrangement(p: number, rnd: () => number, wobble: number): number {
 
 /**
  * `count` bar heights in 0..1 for a video id. Memoised per (videoId, count).
+ *
+ * Pass `barCountFor(durationSec)` so every client asks for the same count and therefore draws the
+ * same shape; the 400 default is only for the placeholder we show before a duration is known.
  */
 export function waveformBars(videoId: string, count = 400): number[] {
-  const n = Math.max(1, Math.min(4000, Math.floor(count) || 400));
+  const n = Math.max(1, Math.min(24000, Math.floor(count) || 400));
   const id = videoId || 'unknown';
   const key = `${id}|${n}`;
   const hit = cache.get(key);
@@ -75,22 +92,25 @@ export function waveformBars(videoId: string, count = 400): number[] {
   const seed = hashString(id);
   const rnd = mulberry32(seed);
   const wobble = rnd() * Math.PI * 2;
-  // Bars per bar-of-music: enough that the kick pattern is visible but not aliased.
-  const barsPerBeat = Math.max(1, Math.round(n / 128));
+  // Kick emphasis every half second, i.e. a 120bpm feel. Fixed in seconds rather than as a
+  // fraction of the track so the pattern reads the same however long the track is.
+  const barsPerBeat = Math.max(1, Math.round(BARS_PER_SEC / 2));
 
   const out = new Array<number>(n);
   for (let i = 0; i < n; i++) {
     const p = n === 1 ? 0 : i / (n - 1);
     let v = arrangement(p, rnd, wobble);
 
-    // 4-beat pattern: kick on 1 and 3, snare-ish on 2 and 4, quieter offbeats.
+    // 4-beat pattern: kick on 1 and 3, snare-ish on 2 and 4, ghost notes between. Each hit is an
+    // attack that decays across the beat rather than a single spike, because a zoomed-in window
+    // is only useful for beatmatching if the transients are visible as transients.
     const beat = Math.floor(i / barsPerBeat) % 4;
-    const inHit = i % barsPerBeat === 0;
-    if (inHit) v *= beat === 0 ? 1.18 : beat === 2 ? 1.1 : 0.98;
-    else v *= 0.8 + rnd() * 0.16;
+    const phase = (i % barsPerBeat) / barsPerBeat;
+    const hit = beat === 0 ? 1 : beat === 2 ? 0.86 : 0.62;
+    v *= 0.68 * (1 + hit * 0.62 * Math.exp(-phase * 9));
 
     // Per-bar jitter so adjacent bars are never identical.
-    v *= 0.9 + rnd() * 0.2;
+    v *= 0.95 + rnd() * 0.1;
 
     out[i] = v < 0.02 ? 0.02 : v > 1 ? 1 : v;
   }

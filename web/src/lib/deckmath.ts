@@ -109,24 +109,35 @@ export function rateForBpm(bpm: number, targetBpm: number): number {
   return targetBpm / bpm;
 }
 
+// A bogus BPM, or a window opened right up to a whole track, must never hand the renderer a
+// million lines to draw.
 const MAX_BEATS = 2000;
 
 /**
- * Beat times (seconds) inside [from, to]. Capped so a bogus BPM (or a wildly
- * zoomed-out timeline) can never hand the renderer a million-element array.
+ * A run of evenly spaced beats covering a view window, described rather than enumerated: at 32
+ * beats a frame and two timelines on screen, handing the renderer a fresh array sixty times a
+ * second is a lot of garbage for four numbers' worth of information.
+ *
+ * `offset` is the deck's first downbeat, so `index` is the beat number counted from *there* —
+ * index 0 is that downbeat, every multiple of four is a bar line, and beats before the downbeat
+ * come back negative rather than being dropped (an intro still deserves a grid).
  */
-export function beatGrid(bpm: number, from: number, to: number): number[] {
-  if (!(bpm > 0) || !Number.isFinite(from) || !Number.isFinite(to) || to <= from) return [];
+export interface BeatWindow {
+  spb: number; // seconds per beat
+  first: number; // time of the first beat at or after `from`
+  firstIndex: number; // its beat number, counted from the downbeat
+  count: number;
+}
+
+export function beatWindow(bpm: number, offset: number, from: number, to: number): BeatWindow | null {
+  if (!(bpm > 0) || !Number.isFinite(from) || !Number.isFinite(to) || to <= from) return null;
   const spb = 60 / bpm;
-  if (!(spb > 0)) return [];
-  const out: number[] = [];
-  const first = Math.ceil(Math.max(0, from) / spb);
-  for (let i = first; out.length < MAX_BEATS; i++) {
-    const t = i * spb;
-    if (t > to) break;
-    out.push(t);
-  }
-  return out;
+  if (!(spb > 0) || !Number.isFinite(spb)) return null;
+  const base = Number.isFinite(offset) ? offset : 0;
+  const firstIndex = Math.ceil((from - base) / spb);
+  const first = base + firstIndex * spb;
+  const count = Math.min(MAX_BEATS, Math.floor((to - first) / spb) + 1);
+  return count > 0 ? { spb, first, firstIndex, count } : null;
 }
 
 /** "3:07" */

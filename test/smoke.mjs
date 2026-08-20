@@ -138,6 +138,33 @@ const derive = (d, now) => (d.playing ? d.anchorPos + ((now - d.anchorAt) / 1000
   ok('sync moves deck B toward deck A tempo', Math.abs(eff - 128) < Math.abs(100 - 128),
     `B eff=${eff.toFixed(1)} target=128 actual rate=${dj.state.decks[1].rateActual}`);
 
+  // The beat grid hangs off the first downbeat, so the offset has to survive the round trip to
+  // every client exactly - a grid that differs between the booth and the audience is a lie.
+  dj.cmd({ action: 'deck.beatOffset', deck: 'a', sec: 0.482 });
+  await dj.waitFor((s) => Math.abs(s.decks[0].beatOffset - 0.482) < 1e-9);
+  await crowd.waitFor((s) => Math.abs(s.decks[0].beatOffset - 0.482) < 1e-9);
+  ok('beat offset reaches the audience unchanged', crowd.state.decks[0].beatOffset === 0.482,
+    'offset=' + crowd.state.decks[0].beatOffset);
+
+  dj.cmd({ action: 'deck.beatOffset', deck: 'a', sec: -3 });
+  await dj.waitFor((s) => s.decks[0].beatOffset === 0);
+  ok('a negative beat offset clamps to zero', dj.state.decks[0].beatOffset === 0);
+
+  dj.cmd({ action: 'deck.beatOffset', deck: 'a', sec: 99999 });
+  await sleep(120);
+  ok('an absurd beat offset is clamped', dj.state.decks[0].beatOffset === 600,
+    'offset=' + dj.state.decks[0].beatOffset);
+
+  dj.cmd({ action: 'deck.beatOffset', deck: 'a', sec: 1.25 });
+  await dj.waitFor((s) => s.decks[0].beatOffset === 1.25);
+  dj.cmd({ action: 'deck.eject', deck: 'a' });
+  await dj.waitFor((s) => s.decks[0].video === null);
+  ok('eject clears the beat offset with the track it belonged to', dj.state.decks[0].beatOffset === 0,
+    'offset=' + dj.state.decks[0].beatOffset);
+  dj.cmd({ action: 'deck.load', deck: 'a', video: { ...vid, id: '' } });
+  dj.cmd({ action: 'deck.bpm', deck: 'a', bpm: 128 });
+  await dj.waitFor((s) => s.decks[0].bpm === 128);
+
   dj.cmd({ action: 'mixer.transition', kind: 'crossfade', durationMs: 1000 });
   dj.cmd({ action: 'mixer.fire', to: 'b' });
   await dj.waitFor((s) => s.mixer.auto.active);

@@ -20,6 +20,8 @@ const (
 	minDJRate = 0.5 // useful DJ pitch range; wider rates exist but destroy beatmatching
 	maxDJRate = 1.5
 	maxBPM    = 300
+	// A first downbeat can sit a long way in on a track with a spoken intro, but not an hour in.
+	maxBeatOffset = 600
 	// Below this a rate difference is inaudible and not worth a broadcast.
 	rateEpsilon = 0.0005
 
@@ -487,6 +489,10 @@ func (h *Hub) deckCmd(c *Client, d *Deck, f *cmdFrame, now int64) {
 		d.BPM = clamp(f.BPM, 0, maxBPM)
 		h.touch()
 
+	case "deck.beatOffset":
+		d.BeatOffset = clamp(f.Sec, 0, maxBeatOffset)
+		h.touch()
+
 	case "deck.sync":
 		other := h.otherDeck(d.ID)
 		if other == nil || d.BPM <= 0 || other.BPM <= 0 {
@@ -516,6 +522,7 @@ func (h *Hub) ejectDeck(d *Deck, now int64) {
 	d.CueIn, d.CueOut = 0, 0
 	d.Loop = false
 	d.BPM = 0
+	d.BeatOffset = 0
 	d.restamp(now, 0)
 	h.touch()
 }

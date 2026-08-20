@@ -51,6 +51,8 @@ export interface Deck {
   cueOut: number;      // 0 = none
   loop: boolean;
   bpm: number;
+  /** Seconds to the first downbeat. The timeline's beat grid hangs off this, not off 0:00. */
+  beatOffset: number;
   monitor: boolean;
   killLow: boolean;
   killMid: boolean;
@@ -133,6 +135,7 @@ export type Cmd =
   | { action: 'deck.cueOut'; deck: DeckId; sec: number }
   | { action: 'deck.loop'; deck: DeckId; on: boolean }
   | { action: 'deck.bpm'; deck: DeckId; bpm: number }
+  | { action: 'deck.beatOffset'; deck: DeckId; sec: number }
   | { action: 'deck.sync'; deck: DeckId }
   | { action: 'deck.monitor'; deck: DeckId; on: boolean }
   | { action: 'mixer.crossfade'; value: number }
