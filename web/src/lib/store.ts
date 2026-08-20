@@ -266,6 +266,7 @@ const eqDeck = (a: Deck | null, b: Deck | null): boolean =>
     a.cueOut === b.cueOut &&
     a.loop === b.loop &&
     a.bpm === b.bpm &&
+    a.beatOffset === b.beatOffset &&
     a.monitor === b.monitor &&
     a.killLow === b.killLow &&
     a.killMid === b.killMid &&

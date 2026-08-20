@@ -79,11 +79,13 @@
 }
 
 /* the track name rides in the corner of the lane so the rail stays narrow */
+/* Along the top-left, clear of two things that also live on this line: the elapsed timecode the
+   timeline paints inside its canvas, and the zoom buttons it puts in the top-right corner. */
 .ws-name {
   position: absolute;
-  right: 6px;
+  left: 112px;
   top: 4px;
-  max-width: 46%;
+  max-width: 34%;
   padding: 1px 6px;
   border-radius: var(--r-sm);
   background: rgba(0, 0, 0, 0.55);

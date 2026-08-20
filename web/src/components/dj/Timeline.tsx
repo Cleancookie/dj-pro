@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { DeckId } from '../../lib/protocol';
-import { cmd, useDeck, useRoom } from '../../lib/store';
+import { cmd, useDeck } from '../../lib/store';
 import { setScrub, usePlayhead } from '../../lib/engine';
 import { beatWindow, fmtTime, fmtTimeMs } from '../../lib/deckmath';
 import { barCountFor, waveformBars } from '../../lib/waveform';
@@ -186,8 +186,9 @@ export function Timeline({ id }: { id: DeckId }) {
   const gridRef = useRef<GridDrag | null>(null);
   /** Window centre, frozen for the length of a drag so the view cannot chase the pointer. */
   const viewRef = useRef<number | null>(null);
-  /** The first downbeat, kept in a ref and fed by BeatOffsetTap — see its note. */
+  /** The first downbeat. Held in a ref because the canvas is drawn imperatively. */
   const offsetRef = useRef(deck?.beatOffset ?? 0);
+  const beatOffset = deck?.beatOffset ?? 0;
 
   const [zoom, setZoom] = useState<Zoom>(() => loadZoom(id));
 
@@ -454,6 +455,13 @@ export function Timeline({ id }: { id: DeckId }) {
     drawRef.current = draw;
     draw();
   }, [draw]);
+
+  // The grid anchor lives in a ref because the canvas is painted imperatively, so it has to be
+  // pushed there whenever the server moves it — a drag on the other DJ's screen, or an eject.
+  useEffect(() => {
+    offsetRef.current = beatOffset;
+    drawRef.current();
+  }, [beatOffset]);
 
   /* ---- size + palette (set up once; redraws go through drawRef) ---------- */
   useEffect(() => {
@@ -730,14 +738,6 @@ export function Timeline({ id }: { id: DeckId }) {
         </button>
       </div>
 
-      <BeatOffsetTap
-        id={id}
-        onChange={(sec) => {
-          offsetRef.current = sec;
-          drawRef.current();
-        }}
-      />
-
       <PlayheadTap
         id={id}
         onTick={(p) => {
@@ -753,28 +753,6 @@ export function Timeline({ id }: { id: DeckId }) {
       />
     </div>
   );
-}
-
-/**
- * Watches the deck's first downbeat.
- *
- * It needs its own subscription because the store's deck-equality check does not yet know about
- * `beatOffset`: a deck whose only change is where bar 1 sits compares equal, so `useDeck` never
- * hands the timeline the new value. Like PlayheadTap this renders nothing, so the cost is one
- * diff of an empty component per broadcast, and the canvas is redrawn imperatively. Delete it the
- * day `eqDeck` in lib/store.ts compares beatOffset.
- */
-function BeatOffsetTap({ id, onChange }: { id: DeckId; onChange: (sec: number) => void }) {
-  const room = useRoom();
-  const sec = room?.decks[id === 'a' ? 0 : 1]?.beatOffset ?? 0;
-  const cb = useRef(onChange);
-  useEffect(() => {
-    cb.current = onChange;
-  }, [onChange]);
-  useEffect(() => {
-    cb.current(sec);
-  }, [sec]);
-  return null;
 }
 
 /**
