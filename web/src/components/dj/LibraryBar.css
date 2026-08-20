@@ -403,6 +403,38 @@
   box-shadow: 0 0 10px -3px var(--cue);
 }
 
+/* A way in for an empty booth: one click fills the crate with something to mix. */
+.lib-sample {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 9px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cue);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--bevel);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--fast),
+    border-color var(--fast),
+    box-shadow var(--fast);
+}
+.lib-sample:hover {
+  border-color: var(--cue);
+  box-shadow:
+    var(--bevel),
+    0 0 12px -4px var(--cue);
+}
+.lib-sample:focus-visible {
+  outline: 1px solid var(--cue);
+  outline-offset: 1px;
+}
+
 /* ---- local files ---- */
 .lib-files {
   flex: 0 0 auto;

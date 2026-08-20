@@ -492,7 +492,8 @@ function CrateTab() {
         <div className="sp-empty-plate">The crate is empty</div>
         <p>
           Paste one link — or a whole list of them — into the box above and hit <b>+ CRATE</b>. Drag rows to
-          reorder, and click a row to plan how it mixes in.
+          reorder, and click a row to plan how it mixes in. Nothing to hand? <b>SAMPLE</b> fills the crate with a
+          starter set.
         </p>
         <p>
           Tracks stay here after they play, marked <b>played</b> — the crate is a library, not a queue. With{' '}

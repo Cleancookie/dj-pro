@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DeckId, Video } from '../../lib/protocol';
-import { cmd, useConfig } from '../../lib/store';
+import { cmd, useConfig, useRoom } from '../../lib/store';
 import { previewPlay } from '../../lib/engine';
 import './LibraryBar.css';
 
@@ -8,6 +8,12 @@ import './LibraryBar.css';
 const BULK_CONCURRENCY = 4;
 
 const YT_ID = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * A starter set, offered only while the crate is empty. Ids rather than URLs: they go through the
+ * very same resolve-and-add path a paste does, so this is a shortcut, not a second way in.
+ */
+const SAMPLE_SET = ['RBaSiVjtKR4', 'lKgzkmTKvHU', 'EC9_h_elSAY', 'QWDayFgPDjQ', 'YF4EN5YwjpA', 'qZTVU04UOO4'];
 
 /** A bare 11-char video id or anything that smells like a link goes to /api/resolve. */
 function looksLikeLink(s: string) {
@@ -115,6 +121,8 @@ async function readError(res: Response) {
  */
 export function LibraryBar() {
   const config = useConfig();
+  const room = useRoom();
+  const crateEmpty = (room?.crate.length ?? 0) === 0;
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Video[]>([]);
   const [mode, setMode] = useState<'resolve' | 'files' | null>(null);
@@ -406,6 +414,16 @@ export function LibraryBar() {
         >
           {busy ? '…' : tokenCount > 1 ? `Add ${tokenCount}` : 'Add'}
         </button>
+        {crateEmpty && !busy && (
+          <button
+            type="button"
+            className="lib-sample"
+            title={`Resolve a sample set of ${SAMPLE_SET.length} tracks and drop them straight into the crate`}
+            onClick={() => void runBulk([...SAMPLE_SET])}
+          >
+            Sample
+          </button>
+        )}
         {config.mediaEnabled && (
           <button
             type="button"
