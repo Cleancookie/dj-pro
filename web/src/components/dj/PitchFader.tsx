@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { DeckId } from '../../lib/protocol';
 import { cmd, useConfig, useDeck } from '../../lib/store';
@@ -27,16 +27,20 @@ export function PitchFader({ id }: { id: DeckId }) {
   const last = useRef(0);
   const timer = useRef<number | null>(null);
   const pendingRate = useRef<number | null>(null);
+  const [dragging, setDragging] = useState(false);
   /**
-   * The last rate asked for, held until the server echoes it back. Every increment is measured
-   * from here rather than from the echo: a held arrow key fires far faster than a round trip, and
-   * six nudges must be six nudges, not one repeated six times.
+   * The last rate asked for, held until the server echoes it back.
+   *
+   * The fader is drawn from this rather than from the echo: an echo is a whole round trip behind
+   * the finger, and a cap that lags then catches up in coalesced hops reads as a fader jumping
+   * around on its own. It is also what every increment is measured from — a held arrow key fires
+   * far faster than a round trip, and six nudges must be six nudges, not one repeated six times.
    */
-  const wish = useRef<number | null>(null);
+  const [asked, setAsked] = useState<number | null>(null);
 
   const send = useRef((rate: number) => {
     pendingRate.current = rate;
-    wish.current = rate;
+    setAsked(rate);
     const dt = performance.now() - last.current;
     const fire = () => {
       timer.current = null;
@@ -59,28 +63,49 @@ export function PitchFader({ id }: { id: DeckId }) {
   }, []);
 
   const rateReq = deck?.rateReq ?? 1;
-  // Once the echo agrees with what was asked for, the echo is the truth again.
-  if (wish.current !== null && Math.abs(wish.current - rateReq) < 0.00005) wish.current = null;
-  /** Where the fader is right now: our own last request until the echo catches up with it. Read
-   *  through a function, not a const — a held arrow key fires several times per render. */
-  const wanted = () => wish.current ?? rateReq;
   const rateActual = deck?.rateActual ?? 1;
+  const trackKey = deck?.video?.url || deck?.video?.videoId || '';
+
+  // Any move of the server's value hands control back to it — unless a drag is in progress, where
+  // the echoes arriving are stale copies of what this fader itself asked for a moment ago.
+  const [prevReq, setPrevReq] = useState(rateReq);
+  if (prevReq !== rateReq) {
+    setPrevReq(rateReq);
+    if (!dragging && asked !== null) setAsked(null);
+  }
+
+  /** Where the fader is right now: our own last request until the echo catches up with it. */
+  const shown = asked ?? rateReq;
+  /** The same value, for handlers that run between renders. */
+  const wanted = () => asked ?? rateReq;
   /* A file deck honours any rate, so it has no error to show and no fixed rates to mark. */
   const continuous = deck?.video?.source === 'file';
-  const snapped = !continuous && Math.abs(rateReq - rateActual) > 0.0015;
+  // The measured rate lands a moment after each request, so mid-drag it disagrees with every
+  // frame and would strobe. It is worth seeing when the fader has settled, not while it moves.
+  const snapped = !continuous && !dragging && Math.abs(rateReq - rateActual) > 0.0015;
 
-  const frac = clamp((rateReq - MIN) / (MAX - MIN), 0, 1);
+  const frac = clamp((shown - MIN) / (MAX - MIN), 0, 1);
   const capY = (1 - frac) * TRAVEL;
 
+  /*
+   * Rates this player has been seen to land on. The documented list is a starting guess only —
+   * players quantise more finely than they admit to (0.05 steps rather than 0.25 is common), and
+   * a mark in the wrong place is worse than no mark. Every measurement replaces the guess.
+   */
+  const [seen, setSeen] = useState<{ key: string; rates: number[] }>({ key: trackKey, rates: [] });
+  if (seen.key !== trackKey) {
+    setSeen({ key: trackKey, rates: [] }); // a new player, a clean slate
+  } else if (!continuous && rateActual > 0 && !seen.rates.some((r) => Math.abs(r - rateActual) < 0.0005)) {
+    setSeen({ key: trackKey, rates: [...seen.rates, rateActual].slice(-64) });
+  }
+
   // Only drawn once this player has actually refused a fine rate: where fine rates are honoured
-  // the fixed list is not a limit worth staring at.
-  const ticks = useMemo(() => {
-    if (continuous || !snapped) return [];
-    const rates = config?.deckRates?.length ? config.deckRates : [];
-    return rates
-      .filter((r) => r >= MIN && r <= MAX)
-      .map((r) => ({ r, y: (1 - (r - MIN) / (MAX - MIN)) * TRAVEL }));
-  }, [config, continuous, snapped]);
+  // there is no limit worth staring at.
+  const marks = seen.rates.length > 1 ? seen.rates : (config?.deckRates ?? []);
+  const ticks =
+    continuous || !snapped
+      ? []
+      : marks.filter((r) => r >= MIN && r <= MAX).map((r) => ({ r, y: (1 - (r - MIN) / (MAX - MIN)) * TRAVEL }));
 
   /**
    * A plain drag is absolute - the cap goes where the finger is. A shift-drag is relative to
@@ -108,6 +133,7 @@ export function PitchFader({ id }: { id: DeckId }) {
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { pointerId: e.pointerId, y: e.clientY, rate: wanted(), fine: e.shiftKey };
+    setDragging(true);
     // A shift-press must not jump the cap: a vernier drag starts from wherever the fader already is.
     if (!e.shiftKey) send.current(rateFromEvent(e.clientY, false));
   };
@@ -136,7 +162,8 @@ export function PitchFader({ id }: { id: DeckId }) {
     pendingRate.current = null;
     last.current = performance.now();
     drag.current = null;
-    wish.current = r;
+    setDragging(false);
+    setAsked(r);
     cmd({ action: 'deck.rate', deck: id, rate: r });
   };
 
@@ -144,7 +171,7 @@ export function PitchFader({ id }: { id: DeckId }) {
     // A deliberate keyboard nudge is never swallowed by the detent: 0.05% is exactly the size of
     // correction a beatmatch is made of, and the detent is four times wider than that.
     const next = clamp(Math.round((wanted() + delta) * 10000) / 10000, MIN, MAX);
-    wish.current = next;
+    setAsked(next);
     cmd({ action: 'deck.rate', deck: id, rate: next });
   };
 
@@ -160,7 +187,7 @@ export function PitchFader({ id }: { id: DeckId }) {
   };
 
   const reset = () => {
-    wish.current = 1;
+    setAsked(1);
     cmd({ action: 'deck.rate', deck: id, rate: 1 });
   };
 
@@ -174,12 +201,12 @@ export function PitchFader({ id }: { id: DeckId }) {
               key={t.r}
               className={'pf-tick' + (Math.abs(t.r - rateActual) < 0.0015 ? ' is-at' : '')}
               style={{ top: t.y + 'px' }}
-              title={'A rate this player is known to accept: ' + t.r + '×'}
+              title={'A rate this player has been seen to accept: ' + t.r.toFixed(4) + '×'}
             />
           ))}
         </div>
         <div
-          className={'pf-track' + (Math.abs(rateReq - 1) < DETENT ? ' is-centred' : '')}
+          className={'pf-track' + (Math.abs(shown - 1) < DETENT ? ' is-centred' : '')}
           ref={trackRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -192,8 +219,8 @@ export function PitchFader({ id }: { id: DeckId }) {
           aria-label={'Deck ' + id.toUpperCase() + ' pitch'}
           aria-valuemin={MIN}
           aria-valuemax={MAX}
-          aria-valuenow={rateReq}
-          aria-valuetext={pctText(rateReq) + '%'}
+          aria-valuenow={shown}
+          aria-valuetext={pctText(shown) + '%'}
           aria-orientation="vertical"
           title="Drag to pitch · hold Shift for a 10× finer drag · double-click or Home to reset · arrow keys nudge (shift = 0.05%)"
         >
@@ -205,12 +232,12 @@ export function PitchFader({ id }: { id: DeckId }) {
       </div>
       <div className="pf-read">
         <div className="pf-pct num" title="Requested pitch">
-          {pctText(rateReq)}%
+          {pctText(shown)}%
         </div>
         {snapped ? (
           <div
             className="pf-snap num"
-            title="This player refused the exact rate and settled on a neighbouring one — the gap is your beatmatching error"
+            title={`This player refused ${rateReq.toFixed(4)}\u00d7 and settled on ${rateActual.toFixed(4)}\u00d7 \u2014 the gap is your beatmatching error. A file deck from MEDIA_DIR takes any rate exactly.`}
           >
             ⇢ {rateActual.toFixed(4)}× {pctText(rateActual)}%
           </div>
@@ -218,12 +245,14 @@ export function PitchFader({ id }: { id: DeckId }) {
           <div
             className="pf-snap is-ok num"
             title={
-              continuous
-                ? 'A local file plays at any rate, with the pitch moving with it — beatmatch freely'
-                : 'The player is running at exactly the rate you asked for'
+              dragging
+                ? 'What the player is being asked for; what it settles on shows when you let go'
+                : continuous
+                  ? 'A local file plays at any rate, with the pitch moving with it — beatmatch freely'
+                  : 'The player is running at exactly the rate you asked for'
             }
           >
-            {rateActual.toFixed(4)}×
+            {(dragging ? shown : rateActual).toFixed(4)}×
           </div>
         )}
       </div>

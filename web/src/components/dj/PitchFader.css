@@ -120,6 +120,10 @@
   flex-direction: column;
   align-items: center;
   line-height: 1.15;
+  /* Both readouts change width as they count; a fixed box keeps the deck from twitching. */
+  width: 96px;
+  min-height: 28px;
+  white-space: nowrap;
 }
 
 .pf-pct {
