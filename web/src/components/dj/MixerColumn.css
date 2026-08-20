@@ -1,11 +1,16 @@
-/* The mixer column — 200px of fixed-width control chassis. */
+/* The mixer column — 200px of fixed-width control chassis.
+ *
+ * Every fixed pixel in here is a pixel the stacked waveforms do not get, and the waveforms are
+ * what a DJ actually stares at. So the sections are packed tight deliberately: the whole column
+ * has to fit without scrolling, because a MASTER OUT or a FIRE button below the fold is a
+ * control that does not exist during a mix. */
 .mixer {
   height: 100%;
   min-height: 0;
-  padding: 7px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   overflow-x: hidden;
   overflow-y: auto;
   background: linear-gradient(180deg, var(--panel), var(--bg) 140%);
@@ -15,8 +20,8 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 6px;
+  gap: 4px;
+  padding: 5px;
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -74,8 +79,8 @@
 /* ---- eq kill grid ---- */
 .mx-eq-grid {
   display: grid;
-  grid-template-columns: 26px 1fr 1fr;
-  gap: 3px;
+  grid-template-columns: 24px 1fr 1fr;
+  gap: 2px;
   align-items: center;
 }
 .mx-eq-line {
@@ -95,7 +100,7 @@
   color: var(--ink-3);
 }
 .mx-kill {
-  height: 22px;
+  height: 20px;
   border: 1px solid var(--line-2);
   border-radius: var(--r-sm);
   background: linear-gradient(180deg, var(--panel-3), var(--panel));
@@ -129,7 +134,9 @@
 /* ---- channel faders + level meters ---- */
 .mx-chans {
   flex: 1 1 auto;
-  min-height: 84px;
+  /* The one section allowed to give — but not below the fader's own furniture (a 26px head and
+     the meter's top margin), or the caps ride out of the box and over the crossfader's label. */
+  min-height: 108px;
 }
 .mx-chan-row {
   flex: 1 1 auto;
@@ -264,7 +271,7 @@
 .mx-fire {
   position: relative;
   overflow: hidden;
-  height: 30px;
+  height: 28px;
   border: 1px solid var(--deck-dim);
   border-radius: var(--r-sm);
   background: linear-gradient(180deg, var(--panel-3), var(--panel));

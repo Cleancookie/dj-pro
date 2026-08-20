@@ -9,11 +9,16 @@
   height: 100%;
   display: grid;
   grid-template-columns: minmax(390px, 1fr) 200px minmax(390px, 1fr) 340px;
-  /* The deck row is capped at the height the mixer column needs to show every control —
-     a fixed value rather than auto, because the side panel spans both rows and would drag
-     the decks taller. Everything past that goes to the stacked waveforms, which is where
-     a DJ's eyes live once both decks are loaded. */
-  grid-template-rows: 56px minmax(0, 620px) minmax(112px, 1fr);
+  /* The deck row is capped at what a deck and the mixer column actually need to show every
+     control — a fixed value rather than auto, because the side panel spans both rows and would
+     otherwise drag the decks taller. Everything past that goes to the stacked waveforms, which is
+     where a DJ's eyes live once both decks are loaded.
+
+     The cap is the height the mixer column needs with its channel faders at their minimum — the
+     one section allowed to give. Sizing the row to min-content instead lets those faders take
+     their natural height back and costs the waveforms ~40px, which is the wrong trade. If you add
+     a mixer section, measure the column again and move this number. */
+  grid-template-rows: 56px minmax(0, 592px) minmax(140px, 1fr);
   grid-template-areas:
     'top top top  top'
     'da  mx  db   side'

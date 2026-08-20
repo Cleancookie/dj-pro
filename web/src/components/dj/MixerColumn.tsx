@@ -74,7 +74,7 @@ function MonitorSection() {
           max={1}
           onChange={(v) => setMon({ cueMix: clamp01(v) })}
           format={(v) => (v <= 0.005 ? 'MIX' : v >= 0.995 ? 'CUE' : pctFmt(v))}
-          size={38}
+          size={34}
         />
         <Knob
           label="Phones"
@@ -83,7 +83,7 @@ function MonitorSection() {
           max={1}
           onChange={(v) => setMon({ cueVol: clamp01(v) })}
           format={pctFmt}
-          size={38}
+          size={34}
         />
         <Knob
           label="Booth"
@@ -92,7 +92,7 @@ function MonitorSection() {
           max={1}
           onChange={(v) => setMon({ masterVol: clamp01(v) })}
           format={pctFmt}
-          size={38}
+          size={34}
         />
       </div>
     </div>
