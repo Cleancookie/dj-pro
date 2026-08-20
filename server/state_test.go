@@ -5,39 +5,6 @@ import (
 	"testing"
 )
 
-func TestSnapRateChoosesNearestAllowed(t *testing.T) {
-	cases := []struct{ in, want float64 }{
-		{1.0, 1.0},
-		{1.1, 1.0},   // 1.1 is nearer 1.0 than 1.25
-		{1.14, 1.25}, // ...but 1.14 tips over the midpoint
-		{0.9, 1.0},
-		{0.6, 0.5},
-		{0.7, 0.75},
-		{5.0, 2.0},
-		{-1, 0.25},
-	}
-	for _, c := range cases {
-		if got := SnapRate(c.in); got != c.want {
-			t.Errorf("SnapRate(%v) = %v, want %v", c.in, got, c.want)
-		}
-	}
-}
-
-func TestSnapRateOnlyReturnsAllowedValues(t *testing.T) {
-	for r := 0.0; r <= 3.0; r += 0.013 {
-		got := SnapRate(r)
-		found := false
-		for _, a := range AllowedRates {
-			if a == got {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("SnapRate(%v) returned %v which is not an allowed playback rate", r, got)
-		}
-	}
-}
-
 func TestNewRoomStateDefaults(t *testing.T) {
 	s := NewRoomState()
 	if s.Decks[0].ID != "a" || s.Decks[1].ID != "b" {
@@ -109,12 +76,17 @@ func TestFileVideoSanitises(t *testing.T) {
 	}
 }
 
-func TestFileDeckRateIsContinuous(t *testing.T) {
+func TestRateIsContinuousOnBothDeckKinds(t *testing.T) {
 	d := newDeck("a")
 	d.Video = &Video{Source: SourceYouTube, VideoID: "dQw4w9WgXcQ"}
 	d.applyRate(1.03)
-	if d.RateActual != 1 {
-		t.Errorf("a YouTube deck must snap to the allowed list, got %v", d.RateActual)
+	if d.RateReq != 1.03 || d.RateActual != 1.03 {
+		t.Errorf("a rate request must go into force unsnapped, got req=%v actual=%v", d.RateReq, d.RateActual)
+	}
+	// Only a measurement from the DJ's own player moves RateActual off the request.
+	d.ackRate(1.0)
+	if d.RateReq != 1.03 || d.RateActual != 1 {
+		t.Errorf("an ack must move only RateActual, got req=%v actual=%v", d.RateReq, d.RateActual)
 	}
 	d.Video = &Video{Source: SourceFile, URL: "/media/x.mp3"}
 	d.applyRate(1.03)

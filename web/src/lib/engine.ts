@@ -4,8 +4,9 @@
 // A deck's player is either a YouTube iframe or a plain media element pointed at a file this
 // server serves. Both are driven through the same small DeckPlayer adapter, because the two ticks
 // below should not care which one they are talking to - and because the difference that matters is
-// not in the control flow but in the pitch fader: YouTube snaps the rate to a fixed list, a media
-// element takes any float and, with preservesPitch off, actually behaves like a turntable.
+// not in the control flow but in the pitch fader: a YouTube iframe may or may not honour a fine
+// rate (so the booth measures what it took and reports it back), while a media element takes any
+// float and, with preservesPitch off, actually behaves like a turntable.
 //
 // Everything here is a module-level singleton driven by two timers:
 //   * a 250ms CONTROL tick   — load/cue, play/pause, rate, drift correction, metadata
@@ -35,6 +36,12 @@ const DRIFT_LIMIT_S = 0.4;
  *  drift until it settles — otherwise it thrashes seek-buffer-seek forever. */
 const SEEK_COOLDOWN_MS = 1_200;
 const LOAD_COOLDOWN_MS = 1_500;
+/** How long to give a player to settle on a new rate before measuring what it took. */
+const RATE_ACK_MS = 400;
+/** A player that is still loading answers with its old rate, so a disagreement is re-measured. */
+const RATE_RETRIES = 3;
+/** Rate differences below this are inaudible; treat the two rates as the same. */
+const RATE_EPS = 0.0005;
 
 // YT player states
 const ST_UNSTARTED = -1;
@@ -73,6 +80,8 @@ interface DeckPlayer {
   /** One of the ST_* constants, whichever player is underneath. */
   getState(): number;
   setRate(rate: number): void;
+  /** What the player is ACTUALLY playing at, which need not be what setRate asked for. */
+  getRate(): number;
   play(): void;
   pause(): void;
   seek(sec: number): void;
@@ -92,6 +101,7 @@ function ytAdapter(p: YT.Player): DeckPlayer {
     },
     getState: () => p.getPlayerState(),
     setRate: (r) => p.setPlaybackRate(r),
+    getRate: () => p.getPlaybackRate(),
     play: () => p.playVideo(),
     pause: () => p.pauseVideo(),
     seek: (sec) => p.seekTo(sec, true),
@@ -136,6 +146,7 @@ function mediaAdapter(el: HTMLVideoElement): DeckPlayer {
     setRate(r) {
       el.playbackRate = r;
     },
+    getRate: () => el.playbackRate,
     play: () => void el.play().catch(() => {}),
     pause: () => el.pause(),
     seek(sec) {
@@ -246,6 +257,10 @@ interface DeckRuntime {
   /** Which KIND of player was built. A track that changes kind needs a new one, not a load. */
   source: 'youtube' | 'file' | null;
   lastRate: number;
+  /** Local deadline at which to measure the rate the player settled on. 0 = nothing to check. */
+  rateCheckAt: number;
+  /** Measurements left before a player's refusal is taken as final. */
+  rateTries: number;
   lastVolume: number;
   muted: boolean;
   scrubbing: boolean;
@@ -267,6 +282,8 @@ function blankRuntime(): DeckRuntime {
     loadedKey: null,
     source: null,
     lastRate: -1,
+    rateCheckAt: 0,
+    rateTries: 0,
     lastVolume: -1,
     muted: true,
     scrubbing: false,
@@ -860,6 +877,8 @@ function controlTick(): void {
       rt.loadedKey = key;
       rt.metaSent = false;
       rt.lastRate = -1;
+      rt.rateCheckAt = 0;
+      rt.rateTries = 0;
       rt.driftMs = 0;
       rt.cooldownUntil = localNow + LOAD_COOLDOWN_MS;
       try {
@@ -880,12 +899,39 @@ function controlTick(): void {
     }
 
     // 2. playback rate
-    if (Math.abs(rt.lastRate - deck.rateActual) > 0.001 && deck.rateActual > 0) {
+    //
+    // Every player is asked for the DJ's EXACT request, not a rate pre-snapped to YouTube's
+    // documented list: players in practice honour fine rates, and a beatmatch lives or dies on the
+    // third decimal place. Whether this particular one obliged is measured rather than assumed.
+    const wantRate = deck.rateReq > 0 ? deck.rateReq : deck.rateActual;
+    if (Math.abs(rt.lastRate - wantRate) > RATE_EPS && wantRate > 0) {
       try {
-        player.setRate(deck.rateActual);
-        rt.lastRate = deck.rateActual;
+        player.setRate(wantRate);
+        rt.lastRate = wantRate;
+        rt.rateCheckAt = localNow + RATE_ACK_MS;
+        rt.rateTries = RATE_RETRIES;
       } catch {
         /* ignore */
+      }
+    }
+
+    // 2b. rate ack — only the DJ measures, because the whole room computes positions from the
+    // single rateActual the server holds, and a player that quietly refused a rate would leave
+    // every listener seeking against a tempo nobody is playing at.
+    if (rt.rateCheckAt > 0 && localNow >= rt.rateCheckAt) {
+      let got = 0;
+      try {
+        got = player.getRate();
+      } catch {
+        got = 0;
+      }
+      // A player still loading answers with its old rate, and reporting that would leave the room
+      // seeking against a tempo nobody plays at. Give it a few more looks before believing it.
+      rt.rateTries -= 1;
+      const settled = got > 0 && Math.abs(got - rt.lastRate) <= RATE_EPS;
+      rt.rateCheckAt = settled || rt.rateTries <= 0 ? 0 : localNow + RATE_ACK_MS * 2;
+      if (st.role === 'dj' && got > 0 && Math.abs(got - deck.rateActual) > RATE_EPS) {
+        cmd({ action: 'deck.rateAck', deck: id, rate: got });
       }
     }
 

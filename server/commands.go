@@ -20,6 +20,8 @@ const (
 	minDJRate = 0.5 // useful DJ pitch range; wider rates exist but destroy beatmatching
 	maxDJRate = 1.5
 	maxBPM    = 300
+	// Below this a rate difference is inaudible and not worth a broadcast.
+	rateEpsilon = 0.0005
 
 	maxTransitionMs = 60_000
 
@@ -425,6 +427,21 @@ func (h *Hub) deckCmd(c *Client, d *Deck, f *cmdFrame, now int64) {
 		d.applyRate(clamp(f.Rate, minDJRate, maxDJRate))
 		h.touch()
 
+	case "deck.rateAck":
+		// The DJ's browser measured what its player actually took. A YouTube iframe may refuse a
+		// fine rate and land on a neighbouring one; without this the whole room would compute
+		// positions from a rate nobody is playing at.
+		if d.Video == nil || f.Rate <= 0 {
+			return
+		}
+		got := clamp(f.Rate, minDJRate, maxDJRate)
+		if math.Abs(got-d.RateActual) < rateEpsilon {
+			return
+		}
+		d.reanchor(now) // the previously believed rate applied up to this instant
+		d.ackRate(got)
+		h.touch()
+
 	case "deck.gain":
 		d.Gain = clamp(f.Gain, 0, 1)
 		h.touch()
@@ -514,8 +531,8 @@ func (h *Hub) loadDeck(d *Deck, v *Video, cueInOverride *float64, now int64) {
 	d.Video = v
 	d.Playing = false
 	d.Loop = false
-	// The new track may not be able to honour the rate the old one did: a YouTube deck snaps,
-	// a file deck does not. Re-derive rather than carry a stale RateActual.
+	// The new track may not honour the rate the old one did, so drop any measured RateActual and
+	// go back to trusting the request until this player reports otherwise.
 	d.applyRate(d.RateReq)
 
 	cueIn := v.Plan.CueIn

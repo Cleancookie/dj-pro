@@ -109,11 +109,18 @@ const derive = (d, now) => (d.playing ? d.anchorPos + ((now - d.anchorAt) / 1000
   await dj.waitFor((s) => Math.abs(s.decks[0].anchorPos - 90) < 0.01);
   ok('seek re-stamps the anchor', true);
 
-  dj.cmd({ action: 'deck.rate', deck: 'a', rate: 1.1 });
+  dj.cmd({ action: 'deck.rate', deck: 'a', rate: 1.013 });
   await dj.waitFor((s) => s.decks[0].rateReq !== 1);
   const dA = dj.state.decks[0];
-  ok('rate request is kept and snapped separately', dA.rateReq === 1.1 && dj.config.deckRates.includes(dA.rateActual),
+  ok('a fine rate goes into force unsnapped', dA.rateReq === 1.013 && dA.rateActual === 1.013,
     `req=${dA.rateReq} actual=${dA.rateActual}`);
+
+  // Only a measurement from the DJ's own player moves rateActual off the request.
+  dj.cmd({ action: 'deck.rateAck', deck: 'a', rate: 1 });
+  await dj.waitFor((s) => s.decks[0].rateActual === 1);
+  const dAck = dj.state.decks[0];
+  ok('a rate ack moves only rateActual', dAck.rateReq === 1.013 && dAck.rateActual === 1,
+    `req=${dAck.rateReq} actual=${dAck.rateActual}`);
 
   dj.cmd({ action: 'deck.rate', deck: 'a', rate: 9 });
   await sleep(120);
@@ -190,8 +197,8 @@ const derive = (d, now) => (d.playing ? d.anchorPos + ((now - d.anchorAt) / 1000
 
   dj.cmd({ action: 'deck.load', deck: 'a', video: { ...vid, id: '' } });
   await dj.waitFor((s) => s.decks[0].video?.videoId === VID);
-  ok('reloading a YouTube track re-snaps the rate the file deck was holding',
-    dj.state.decks[0].rateActual === 1 && dj.state.decks[0].rateReq === 1.03,
+  ok('reloading a YouTube track keeps the rate the file deck was holding, unsnapped',
+    dj.state.decks[0].rateActual === 1.03 && dj.state.decks[0].rateReq === 1.03,
     JSON.stringify({ req: dj.state.decks[0].rateReq, actual: dj.state.decks[0].rateActual }));
   dj.cmd({ action: 'deck.rate', deck: 'a', rate: 1 });
   dj.cmd({ action: 'deck.eject', deck: 'a' });

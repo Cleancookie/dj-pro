@@ -16,9 +16,9 @@ export interface Video {
   addedBy: string;
   playedAt: number;    // server ms it was last loaded to a deck; 0 = never played
   /**
-   * Which player this track needs. 'youtube' is an iframe whose rate snaps to a fixed list;
-   * 'file' is a media element served from MEDIA_DIR, whose rate is continuous — the only source
-   * on which the pitch fader can actually beatmatch.
+   * Which player this track needs. 'youtube' is an iframe, which may or may not honour a fine
+   * rate (the booth measures it and reports back); 'file' is a media element served from
+   * MEDIA_DIR, whose rate is continuous by construction — the source that always beatmatches.
    */
   source: 'youtube' | 'file';
   url: string;         // file sources only: a path under /media/
@@ -97,10 +97,10 @@ export interface RoomState {
 }
 
 export interface ServerConfig {
-  searchEnabled: boolean;
   /** Whether the server has a MEDIA_DIR, i.e. whether file-backed decks exist at all. */
   mediaEnabled: boolean;
-  /** YouTube's fixed rate list. File decks ignore it — they take any float. */
+  /** The rates a YouTube iframe documents as guaranteed. Nothing is snapped to it — the pitch
+   *  fader only marks them when a player turns out to refuse the rate it was asked for. */
   deckRates: number[];
 }
 
@@ -124,6 +124,8 @@ export type Cmd =
   | { action: 'deck.seek'; deck: DeckId; positionSec: number }
   | { action: 'deck.nudge'; deck: DeckId; deltaSec: number }
   | { action: 'deck.rate'; deck: DeckId; rate: number }
+  /** The DJ's browser reporting the rate its player actually settled on. */
+  | { action: 'deck.rateAck'; deck: DeckId; rate: number }
   | { action: 'deck.gain'; deck: DeckId; gain: number }
   | { action: 'deck.trim'; deck: DeckId; trim: number }
   | { action: 'deck.eqKill'; deck: DeckId; band: Band; on: boolean }

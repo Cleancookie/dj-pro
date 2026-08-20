@@ -30,8 +30,9 @@ on its first frame.
   cue out) that the DJ can arrange ahead of time or live. Auto-advance hands progression to the
   server, which fires each planned transition on time and keeps the idle deck prepped with the next
   track — an infinite set that runs itself until the DJ takes the fader back.
-- **Library**: paste any YouTube link (resolved server-side via oEmbed, no API key needed) or search
-  when a `YOUTUBE_API_KEY` is present. Queue with drag-to-reorder and load-to-deck.
+- **Library**: paste any YouTube link, one or a whole list (resolved server-side via oEmbed, no API
+  key needed). It lives above the crate in the side panel. Crate with drag-to-reorder and
+  load-to-deck.
 - **Keyboard shortcuts** for everything a DJ touches mid-mix.
 
 ## Dancefloor (audience, `/`)
@@ -42,10 +43,11 @@ on its first frame.
 - Join gate that collects a nickname and unlocks audio (browsers require a gesture).
 
 ## Deliberate constraints, stated honestly
-- **Playback rate is quantised.** The YouTube IFrame API only honours a fixed set of playback rates
-  (0.25 … 2). True continuous pitch is impossible, so the pitch fader shows the requested value
-  *and* the snapped value that is actually applied, and marks the reachable rates on its scale.
-  Beatmatching is therefore approximate — the UI says so rather than pretending.
+- **Playback rate is asked for exactly, then verified.** Every player gets the exact requested
+  rate; the DJ's browser measures what it really took and reports it back, so the room computes
+  positions from the truth. A YouTube iframe that refuses a fine rate makes the fader show both
+  numbers and mark its documented rates — the error is stated rather than hidden. A file deck takes
+  any float, so there is no error to state.
 - **EQ kills are attenuation, not filtering.** A cross-origin YouTube iframe gives no access to the
   audio graph, so there is no real low/mid/high split. The kills duck the channel and the UI labels
   the approximation.
